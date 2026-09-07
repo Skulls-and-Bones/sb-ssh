@@ -1,102 +1,206 @@
-﻿# S&B NetGate (sb-ssh) — Modern OAuth-Secured SSH CLI
+# S&B NetGate (`sb-ssh`)
+> **Tactical Zero-Trust SSH CLI & Infrastructure Gateway**  
+> Autarke Single-Binary CLI & TUI in 100% Rust (russh, Tokio, Ratatui).  
+> *Sicherheitsmarke: Skulls & Bones ([skulls-and-bones.org](https://www.skulls-and-bones.org))*
 
-> **Autarker, hochperformanter SSH-Client mit OAuth2/OIDC-Authentifizierung, kurzlebigen Ed25519-Sitzungszertifikaten und taktischer Terminal-UI.**
-
-Entwickelt in **Rust** für Ingenieure und DevOps-Teams, die herkömmliche statische SSH-Schlüssel (`authorized_keys` Sprawl) durch ein modernes, identitätsbasiertes Just-in-Time Zero-Trust-Modell ersetzen wollen.
-
----
-
-## ⚡ Key Features
-
-1. **Identity-First OAuth2 & OIDC:**
-   - Einloggen im Browser über GitHub oder OIDC (Google, Authentik, Keycloak, Okta) mit MFA & Passkeys.
-   - Kein manuelles Verteilen privater/öffentlicher SSH-Keys mehr nötig.
-
-2. **Kurzlebige Ephemere OpenSSH-Zertifikate (8h Gültigkeit):**
-   - Generiert bei jeder Sitzung ein temporäres Ed25519-Schlüsselpaar im Speicher.
-   - Wird von der internen **S&B Certificate Authority (CA)** signiert.
-   - Nach Ablauf der Sitzung verfällt das Zertifikat automatisch — gestohlene Laptops oder vergessene Keys stellen kein Sicherheitsrisiko dar.
-
-3. **1-Klick Server-CA Setup:**
-   - Server müssen nicht mehr mit einzelnen Entwickler-Keys bestückt werden.
-   - Ein einziger Eintrag in `/etc/ssh/sshd_config` (`TrustedUserCAKeys /etc/ssh/sb_ca.pub`) genügt.
-
-4. **Taktisches TUI-Dashboard (Ratatui):**
-   - Interaktive Serverliste direkt im Terminal.
-   - Live-Latenz / Ping-Monitor zu allen hinterlegten Nodes.
-   - Filterung nach Tags (`prod`, `web`, `database`, `staging`).
-   - 1-Tastendruck-Verbindung mit `[ENTER]`.
-
-5. **Kompakte Native Binary:**
-   - Einzelne autarke Executable (`3.15 MB`).
-   - Keine Node.js-, Python- oder OpenSSL-Runtime erforderlich.
+[![Rust](https://img.shields.io/badge/Language-Rust_2021-orange.svg?style=flat-square)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg?style=flat-square)](LICENSE)
+[![Compliance](https://img.shields.io/badge/BSI_IT--Grundschutz-OPS.1.1.4_%26_DER.1-brightgreen.svg?style=flat-square)](https://www.bsi.bund.de)
+[![Zero-Dependency](https://img.shields.io/badge/Dependencies-100%25_Pure--Rust-blueviolet.svg?style=flat-square)](#)
 
 ---
 
-## 🚀 Installation & Build
+## ⚡ Das Problem mit herkömmlichem SSH
 
+* **Key-Sprawl & Gestohlene Laptops:** Entwickler-Laptops tragen oft Dutzende ungeschützte Private-Keys (`id_ed25519`), die jahrelang auf Servern in `~/.ssh/authorized_keys` hinterlegt bleiben.
+* **Keine Revocation:** Scheidet ein Mitarbeiter aus, müssen Keys manuell auf jedem Host gelöscht werden.
+* **Mangelndes Audit:** System-Logs zeigen nur "User root logged in", aber nicht *wer* hinter dem SSH-Key steckte.
+* **Abhängigkeiten:** Bestehende Tools sind oft schwerfällige Wrapper um externe Binaries (`ssh.exe`, `scp.exe`, OpenSSL).
+
+---
+
+## 🛡️ Die Lösung: S&B NetGate
+
+**S&B NetGate (`sb-ssh`)** eliminiert statische SSH-Schlüssel vollständig. Anstelle unübersichtlicher Key-Dateien authentifiziert sich der Nutzer über seinen zentralen Identity-Provider (OAuth2 PKCE / OIDC). 
+
+Eine integrierte, kryptographische **Certificate Authority (CA)** stellt in Millisekunden ein **kurzlebiges OpenSSH-Zertifikat** (z. B. 8 Stunden Gültigkeit) aus. Server benötigen lediglich **einen einzigen Eintrag** in `/etc/ssh/sshd_config` (`TrustedUserCAKeys /etc/ssh/sb_ca.pub`) und akzeptieren fortan jeden autorisierten Zugriff passwortlos und schlüsselfrei.
+
+---
+
+## 🚀 Key Features
+
+| Feature | Beschreibung |
+| :--- | :--- |
+| **100% Pure-Rust Transport** | Nativer SSH2-Client (`russh` v0.63 + `ring`). Null externe Abhängigkeiten zu `ssh.exe`, `scp.exe` oder OpenSSL. |
+| **Kurzlebige Zertifikate** | Just-in-Time Ed25519 OpenSSH User-Zertifikate (`ssh-ed25519-cert-v01@openssh.com`) mit automatischer Gültigkeitsbeschränkung. |
+| **Aufgeräumtes TUI Dashboard** | Minimalistisches Ratatui-Interface mit Vollbild-Serverliste, Live-Latenz-Ping, Suchfilter und 1-Klick Connect. |
+| **Dynamischer SOCKS5-Proxy** | Integrierter RFC 1928 SOCKS5-Server (`sb-ssh proxy` / `-D 1080`) für Browser und interne Netze mit DNS-Leak Protection. |
+| **BSI Session-Audit** | Revisionssicheres JSONL-Log nach BSI IT-Grundschutz (OPS.1.1.4 & DER.1) in `~/.sb-ssh/audit/sessions.jsonl`. |
+| **Asciinema Recording & Replay** | Vollständige Aufzeichnung von Terminal-Sitzungen im `.cast`-Format (`-r`) mit nativem Player (`sb-ssh replay`). |
+| **In-Memory Bastion / ProxyJump** | Kaskadierter SSH-over-SSH Tunnelbau im Speicher (`channel_open_direct_tcpip`) ohne lokale Ports oder Subprozesse. |
+| **Natives SFTP & Remote-Exec** | Upload (`push`), Download (`pull`) via SFTP und parallele Broadcast-Ausführung (`exec`) über Server-Tags. |
+| **Drop-in OpenSSH Alias** | Vollständig kompatibel mit `GIT_SSH_COMMAND`, `rsync`, `vscode` und Skripten durch automatische Flag-Toleranz. |
+| **Shell-Completions** | Autovervollständigung für PowerShell, Bash, Zsh, Fish und Elvish via `clap_complete`. |
+
+---
+
+## 📦 Installation & Schnellstart
+
+### 1. Aus Quellcode installieren (Cargo)
 ```bash
-cd tools/sb-ssh
-cargo build --release
+# Repository klonen
+git clone https://github.com/Skulls-and-Bones/sb-ssh.git
+cd sb-ssh
+
+# Global installieren
+cargo install --path . --force
 ```
-Die fertige Binary befindet sich unter `tools/sb-ssh/target/release/sb-ssh.exe` (bzw. `sb-ssh` unter Linux/macOS).
+
+### 2. Optional: Als primären SSH-Client setzen (Windows Drop-in)
+```powershell
+# sb-ssh als Standard-ssh.exe registrieren:
+Copy-Item "$env:USERPROFILE\.cargo\bin\sb-ssh.exe" "$env:USERPROFILE\.cargo\bin\ssh.exe" -Force
+```
+
+### 3. Shell-Autovervollständigung aktivieren
+```powershell
+# In PowerShell ($PROFILE):
+sb-ssh completions powershell | Out-String | Invoke-Expression
+
+# In Zsh (~/.zshrc):
+sb-ssh completions zsh > ~/.zfunc/_sb-ssh
+```
 
 ---
 
-## 📖 CLI Befehle
+## 📖 Anwendungsbeispiele & CLI Cheatsheet
 
-### 1. Interaktive Terminal-UI starten (Standard)
+### 🖥️ Interaktive Terminal-Oberfläche (TUI)
 ```bash
 sb-ssh
 # oder explizit:
 sb-ssh tui
 ```
-- `↑ / ↓`: Server auswählen
-- `[ENTER]`: Direkt verbinden
-- `[L]`: OAuth-Login starten
-- `[Q]`: Beenden
+* `↑ / ↓`: Server auswählen
+* `[Enter]`: Sofortige native Verbindung
+* `[+]`: Server zum Tresor hinzufügen
+* `[D]`: Server mit Sicherheitsdialog löschen
+* `[R]`: Latenzen neu messen
+* `[Q]`: Beenden
 
-### 2. Authentifizierung (OAuth / Dev)
+---
+
+### 🌐 Dynamischer SOCKS5-Proxy (`-D`)
+Verbindet einen Browser oder Tools direkt mit dem internen Netzwerk des Remote-Servers:
 ```bash
-# Browser-Login via OAuth2 Loopback (GitHub / OIDC)
-sb-ssh login
+# Expliziter Proxy:
+sb-ssh proxy hostinger-prod --port 1080
 
-# Schneller Entwickler-Login ohne Browser
-sb-ssh login --dev leonf
-
-# Status der aktuellen Sitzung und CA einsehen
-sb-ssh status
-
-# Sitzung beenden
-sb-ssh logout
+# Oder im gewohnten OpenSSH-Stil:
+ssh -D 1080 hostinger-prod
+```
+Nutzung z. B. mit `curl`:
+```bash
+curl --socks5-hostname 127.0.0.1:1080 http://internal-db:5432
 ```
 
-### 3. Server-Tresor verwalten
+---
+
+### 🛡️ Revisionssicheres Session-Audit & Recording
 ```bash
-# Server auflisten mit Live-Latenz
-sb-ssh list
+# Sitzung verbinden und aufzeichnen:
+sb-ssh connect hostinger-prod --record
+# oder kurz:
+ssh hostinger-prod -r
 
-# Nach Tags filtern
-sb-ssh list --tag prod
+# BSI IT-Grundschutz Audit-Protokoll einsehen:
+sb-ssh audit
 
-# Neuen Server hinzufügen
-sb-ssh add hostinger-prod 145.223.83.235 --user leonf --port 22 --tags prod,web,nginx --desc "Production VPS"
+# Audit als unformatierte JSON-Lines für SIEM (Splunk, Elastic):
+sb-ssh audit --json
 
-# Server entfernen
-sb-ssh remove hostinger-prod
+# Aufgezeichnete Sitzung im Terminal abspielen:
+sb-ssh replay sb-20260907-182353-04a1
 ```
 
-### 4. Direktverbindung
-```bash
-# Über hinterlegten Alias
-sb-ssh connect hostinger-prod
+---
 
-# Oder Ad-hoc mit IP
-sb-ssh connect leonf@145.223.83.235
+### 🌉 Bastion & Jump-Host (ProxyJump)
+```bash
+# Server mit vorgeschaltetem Bastion-Host hinzufügen:
+sb-ssh add db-internal 10.0.1.5 --user ubuntu --jump bastion-dmz
+
+# Verbinden (baut SSH-over-SSH Streaming direkt im RAM auf):
+sb-ssh connect db-internal
 ```
 
-### 5. Server für S&B CA rüsten (Zero-Key Setup)
+---
+
+### 📂 SFTP Dateitransfer & Remote-Exec
+```bash
+# Datei per nativem SFTP hochladen:
+sb-ssh push hostinger-prod ./dist/bundle.tar.gz /var/www/
+
+# Datei herunterladen:
+sb-ssh pull hostinger-prod /var/log/nginx/access.log ./access.log
+
+# Befehl parallel auf allen Produktionsservern ausführen:
+sb-ssh exec "uptime" --tag prod
+```
+
+---
+
+### 🤖 Drop-in Kompatibilität (`git`, CI/CD, Scripts)
+Da `sb-ssh` standardmäßige OpenSSH-Flags (`-p`, `-i`, `-o`, `-T`, etc.) versteht und bei Befehlsübergabe automatisch in den Non-Interactive Streaming-Modus wechselt:
+```powershell
+# Git-Transfers über S&B NetGate tunneln:
+$env:GIT_SSH_COMMAND = "sb-ssh"
+git clone git@github.com:Skulls-and-Bones/sb-ssh.git
+
+# Batch-Kommando ausführen (gibt sauberes stdout & Exit-Code zurück):
+ssh hostinger-prod "df -h /"
+```
+
+---
+
+### 🔧 1-Klick Server CA-Einrichtung
+Damit ein neuer Server sofort Zertifikate von `sb-ssh` akzeptiert:
 ```bash
 sb-ssh server-init
 ```
-Gibt die S&B CA Public Key Signatur und den entsprechenden `sshd_config`-Befehl aus.
+Folge den zwei angezeigten Befehlen (Public Key hinterlegen & `sshd_config` anpassen). Danach benötigt kein Benutzer jemals wieder einen statischen Key auf diesem Server.
+
+---
+
+## 📋 Vollständige CLI-Befehlsreferenz
+
+| Befehl | Argumente | Beschreibung |
+| :--- | :--- | :--- |
+| `sb-ssh` | `[target] [args...]` | Startet die TUI oder verbindet direkt (Drop-in `ssh`) |
+| `sb-ssh tui` | — | Öffnet das grafische Vollbild-Terminal-Dashboard |
+| `sb-ssh menu` | — | Öffnet das zeilenbasierte Schnellmenü mit Latenzen |
+| `sb-ssh connect` | `<target> [-r]` | Verbindet nativ (optional mit Aufzeichnung) |
+| `sb-ssh proxy` | `<target> [-p port]` | Startet lokalen SOCKS5-Proxy (Standard: 1080) |
+| `sb-ssh tunnel` | `<target> <local:rem>`| Öffnet einen TCP Port-Forwarding-Tunnel |
+| `sb-ssh info` | `<target>` | Blitzschnelle Health-Probe (CPU, RAM, Disk, Uptime) |
+| `sb-ssh push` | `<target> <loc> [rem]`| Lädt Dateien via nativem SFTP hoch |
+| `sb-ssh pull` | `<target> <rem> [loc]`| Lädt Dateien via nativem SFTP herunter |
+| `sb-ssh exec` | `"<cmd>" [-t target]` | Multi-Server Broadcast-Ausführung |
+| `sb-ssh audit` | `[-l limit] [--json]` | Zeigt BSI IT-Grundschutz Sitzungsprotokolle |
+| `sb-ssh replay` | `<session/file>` | Spielt eine Terminal-Aufzeichnung (.cast) ab |
+| `sb-ssh login` | `[--dev <user>]` | Startet OAuth2 PKCE Browser-Login / Dev-Login |
+| `sb-ssh logout` | — | Beendet die Sitzung & löscht lokalen Token |
+| `sb-ssh status` | — | Zeigt Auth-Status, Ablaufzeit & CA-Public-Key |
+| `sb-ssh add` | `<name> <host> [-j jump]` | Fügt neuen Server zum Tresor hinzu |
+| `sb-ssh list` | `[--tag <tag>]` | Listet alle Server mit Live-Latenz auf |
+| `sb-ssh remove` | `<name>` | Entfernt Server dauerhaft aus dem Tresor |
+| `sb-ssh cert` | `[-H hours]` | Manuelle Erstellung eines signierten Zertifikats |
+| `sb-ssh server-init`| — | Gibt die 1-Klick Anleitung für Zielserver aus |
+| `sb-ssh completions`| `<shell>` | Generiert Shell-Completions (powershell, bash, zsh, fish) |
+
+---
+
+## 🔒 Lizenz & Sicherheit
+Entwickelt von **Skulls & Bones Lab** ([skulls-and-bones.org](https://www.skulls-and-bones.org)).  
+Lizenziert unter der MIT-Lizenz.
+
