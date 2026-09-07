@@ -5,6 +5,8 @@ mod cert;
 mod auth;
 mod runner;
 mod tui;
+mod tunnel;
+mod probe;
 
 use std::io::{stdin, stdout, Write};
 use clap::Parser;
@@ -102,6 +104,14 @@ async fn main() {
                 Err(e) => eprintln!("  {} Fehler bei Zertifikatserstellung: {}", "✗".bright_red(), e),
             }
         }
+        Some(Commands::Tunnel { target, forward }) => {
+            if let Err(e) = tunnel::run_tunnel(&target, &forward) {
+                eprintln!("  {} Tunnel-Fehler: {}", "✗".bright_red(), e);
+            }
+        }
+        Some(Commands::Info { target }) => {
+            probe::print_server_health(&target);
+        }
         Some(Commands::ServerInit) => {
             handle_server_init();
         }
@@ -155,11 +165,13 @@ async fn handle_interactive_selector() {
 
         println!("{}", "══════════════════════════════════════════════════════════════════════════════════════".bright_black());
         println!(
-            "  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}   {} {}",
+            "  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}",
             "[1-N / Enter]".bright_yellow().bold(), "Verbinden",
             "[+]".bright_cyan().bold(), "Server hinzufügen",
             "[-]".bright_red().bold(), "Server löschen",
             "[e]".bright_magenta().bold(), "Bearbeiten",
+            "[u]".bright_blue().bold(), "SSH-Tunnel",
+            "[i]".bright_green().bold(), "Health-Probe",
             "[r]".bright_yellow().bold(), "Neu messen",
             "[t]".bright_cyan().bold(), "Vollbild-TUI",
             "[q]".bright_black().bold(), "Beenden"
@@ -179,6 +191,16 @@ async fn handle_interactive_selector() {
         }
 
         if choice.eq_ignore_ascii_case("r") || choice.eq_ignore_ascii_case("refresh") {
+            continue;
+        }
+
+        if choice.eq_ignore_ascii_case("u") || choice.eq_ignore_ascii_case("tunnel") {
+            handle_interactive_tunnel();
+            continue;
+        }
+
+        if choice.eq_ignore_ascii_case("i") || choice.eq_ignore_ascii_case("info") {
+            handle_interactive_info();
             continue;
         }
 
@@ -412,6 +434,82 @@ fn handle_interactive_edit() {
     }
 }
 
+fn handle_interactive_tunnel() {
+    let vault = load_vault();
+    if vault.servers.is_empty() {
+        println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
+        return;
+    }
+
+    println!("\n{}", "── SSH PORT-FORWARDING TUNNEL ÖFFNEN ──".bright_blue());
+    print!("  Zielserver auswählen [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
+    let _ = stdout().flush();
+    let mut choice = String::new();
+    let _ = stdin().read_line(&mut choice);
+    let choice = choice.trim();
+
+    let target = if choice.is_empty() {
+        vault.servers.first().map(|s| s.name.clone())
+    } else if let Ok(num) = choice.parse::<usize>() {
+        if num >= 1 && num <= vault.servers.len() {
+            vault.servers.get(num - 1).map(|s| s.name.clone())
+        } else {
+            eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
+            return;
+        }
+    } else {
+        Some(choice.to_string())
+    };
+
+    if let Some(target_server) = target {
+        print!("  Port-Weiterleitung (z.B. '8080:80' oder '5432:5432'): ");
+        let _ = stdout().flush();
+        let mut forward = String::new();
+        let _ = stdin().read_line(&mut forward);
+        let forward = forward.trim();
+        if forward.is_empty() { return; }
+
+        if let Err(e) = tunnel::run_tunnel(&target_server, forward) {
+            eprintln!("  {} Tunnel-Fehler: {}", "✗".bright_red(), e);
+        }
+    }
+}
+
+fn handle_interactive_info() {
+    let vault = load_vault();
+    if vault.servers.is_empty() {
+        println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
+        return;
+    }
+
+    println!("\n{}", "── REMOTE SERVER HEALTH PROBE ──".bright_green());
+    print!("  Server für Health-Probe auswählen [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
+    let _ = stdout().flush();
+    let mut choice = String::new();
+    let _ = stdin().read_line(&mut choice);
+    let choice = choice.trim();
+
+    let target = if choice.is_empty() {
+        vault.servers.first().map(|s| s.name.clone())
+    } else if let Ok(num) = choice.parse::<usize>() {
+        if num >= 1 && num <= vault.servers.len() {
+            vault.servers.get(num - 1).map(|s| s.name.clone())
+        } else {
+            eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
+            return;
+        }
+    } else {
+        Some(choice.to_string())
+    };
+
+    if let Some(target_server) = target {
+        probe::print_server_health(&target_server);
+        println!("\nDrücke [ENTER] um fortzufahren...");
+        let mut _b = String::new();
+        let _ = stdin().read_line(&mut _b);
+    }
+}
+
 async fn handle_tui() {
     loop {
         match run_tui() {
@@ -427,6 +525,25 @@ async fn handle_tui() {
             }
             Ok(Some(TuiAction::TriggerAdd)) => {
                 handle_interactive_add();
+            }
+            Ok(Some(TuiAction::TriggerInfo(server))) => {
+                probe::print_server_health(&server.name);
+                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                let mut buf = String::new();
+                let _ = std::io::stdin().read_line(&mut buf);
+            }
+            Ok(Some(TuiAction::TriggerTunnel(server))) => {
+                print!("\n  Port-Weiterleitung für '{}' (z.B. '8080:80' oder '5432:5432'): ", server.name.bold());
+                let _ = stdout().flush();
+                let mut forward = String::new();
+                let _ = stdin().read_line(&mut forward);
+                let forward = forward.trim();
+                if !forward.is_empty() {
+                    let _ = tunnel::run_tunnel(&server.name, forward);
+                }
+                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                let mut buf = String::new();
+                let _ = std::io::stdin().read_line(&mut buf);
             }
             Ok(Some(TuiAction::Quit)) | Ok(None) => break,
             Err(e) => {

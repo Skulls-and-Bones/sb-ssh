@@ -21,6 +21,8 @@ pub enum TuiAction {
     Connect(ServerEntry),
     TriggerLogin,
     TriggerAdd,
+    TriggerTunnel(ServerEntry),
+    TriggerInfo(ServerEntry),
     Quit,
 }
 
@@ -156,6 +158,16 @@ fn run_loop(
                     KeyCode::Up | KeyCode::Char('k') => app.previous(),
                     KeyCode::Char('l') => return Ok(Some(TuiAction::TriggerLogin)),
                     KeyCode::Char('r') => app.refresh_latencies(),
+                    KeyCode::Char('i') => {
+                        if let Some(server) = app.selected_server() {
+                            return Ok(Some(TuiAction::TriggerInfo(server.clone())));
+                        }
+                    }
+                    KeyCode::Char('u') => {
+                        if let Some(server) = app.selected_server() {
+                            return Ok(Some(TuiAction::TriggerTunnel(server.clone())));
+                        }
+                    }
                     KeyCode::Char('d') | KeyCode::Char('x') | KeyCode::Delete => {
                         if !app.vault.servers.is_empty() {
                             app.confirm_delete = true;
@@ -301,17 +313,19 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
     } else {
         let footer_spans = vec![
             Span::styled(" [ENTER] ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(" Verbinden   ", Style::default().fg(Color::White)),
+            Span::styled(" Verbinden  ", Style::default().fg(Color::White)),
+            Span::styled(" [I] ", Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(" Stats  ", Style::default().fg(Color::White)),
+            Span::styled(" [U] ", Style::default().fg(Color::Black).bg(Color::Blue).add_modifier(Modifier::BOLD)),
+            Span::styled(" Tunnel  ", Style::default().fg(Color::White)),
             Span::styled(" [D] ", Style::default().fg(Color::Black).bg(Color::Red).add_modifier(Modifier::BOLD)),
-            Span::styled(" Löschen   ", Style::default().fg(Color::White)),
-            Span::styled(" [+] ", Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled(" Hinzufügen   ", Style::default().fg(Color::White)),
+            Span::styled(" Löschen  ", Style::default().fg(Color::White)),
+            Span::styled(" [+] ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(" Neu  ", Style::default().fg(Color::White)),
             Span::styled(" [R] ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled(" Ping   ", Style::default().fg(Color::White)),
-            Span::styled(" [L] ", Style::default().fg(Color::Black).bg(Color::Blue).add_modifier(Modifier::BOLD)),
-            Span::styled(" Login   ", Style::default().fg(Color::White)),
+            Span::styled(" Ping  ", Style::default().fg(Color::White)),
             Span::styled(" [↑/↓] ", Style::default().fg(Color::Black).bg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-            Span::styled(" Nav   ", Style::default().fg(Color::White)),
+            Span::styled(" Nav  ", Style::default().fg(Color::White)),
             Span::styled(" [Q] ", Style::default().fg(Color::Black).bg(Color::Gray).add_modifier(Modifier::BOLD)),
             Span::styled(" Beenden", Style::default().fg(Color::White)),
         ];

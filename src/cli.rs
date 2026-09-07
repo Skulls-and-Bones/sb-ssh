@@ -86,6 +86,20 @@ pub enum Commands {
         hours: u32,
     },
 
+    /// Öffnet einen verschlüsselten SSH-Port-Forwarding-Tunnel zum Zielserver
+    Tunnel {
+        /// Servername aus dem Tresor oder Zieladresse (z.B. 'hostinger-prod')
+        target: String,
+        /// Port-Weiterleitung im Format '<local_port>:<remote_port>' (z.B. '8080:80')
+        forward: String,
+    },
+
+    /// Führt eine schnelle Non-Interactive Telemetrie- und Health-Probe auf dem Server aus
+    Info {
+        /// Servername aus dem Tresor oder Zieladresse
+        target: String,
+    },
+
     /// Gibt die 1-Klick Anleitung & Konfiguration aus, um Ziel-Server für S&B CA zu rüsten
     ServerInit,
 }

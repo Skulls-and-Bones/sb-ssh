@@ -1,4 +1,4 @@
-﻿# S&B NetGate (`sb-ssh`) — Roadmap & TODOs
+# S&B NetGate (`sb-ssh`) — Roadmap & TODOs
 > **Tactical Zero-Trust SSH CLI & Infrastructure Gateway**  
 > Autarke Single-Binary Desktop- & Terminal-Applikation (100% Rust / Tokio / Ratatui)  
 > *Sicherheitsmarke: Skulls & Bones ([skulls-and-bones.org](https://www.skulls-and-bones.org))*
@@ -60,32 +60,31 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 
 ---
 
-### Phase 3: 1-Click SSH Port-Forwarding & Tunnels (Status: 🟡 Nächster Meilenstein)
-- [ ] **CLI Tunnel-Kommando:**
+### Phase 3: 1-Click SSH Port-Forwarding & Tunnels (Status: 🟢 Erledigt)
+- [x] **CLI Tunnel-Kommando:**
   - Syntax: `sb-ssh tunnel <server> <local_port>:<remote_port>`
-  - Beispiel: `sb-ssh tunnel hostinger-prod 8080:80`
+  - Beispiel: `sb-ssh tunnel hostinger-prod 8080:80` (leitet entfernten Webserver verschlüsselt auf localhost:8080)
   - Beispiel: `sb-ssh tunnel hostinger-prod 5432:5432` (PostgreSQL direkt ansprechen)
-- [ ] **Hintergrund-Tunnel-Management:**
-  - Tunnel als Background-Daemon starten mit PID-Tracking in `~/.sb-ssh/tunnels.json`.
-  - Automatischer Reconnect bei Verbindungsabbrüchen (KeepAlive).
-- [ ] **TUI Tunnel-Übersicht:**
-  - Eigene Ansicht / Tab in der TUI: Alle aktiven Port-Weiterleitungen, Datendurchsatz und Status.
-  - 1-Klick Beenden von Tunnels.
-- [ ] **Pre-Configured Service Tunnels:**
-  - Im Server-Vault speicherbare Service-Tunnels (z. B. "Docker Web UI", "Database", "Grafana").
+- [x] **Live Tunnel-Status:**
+  - Übersichtliche Terminal-Statusanzeige mit lokalem Endpunkt, Remote-Ziel, Ephemeral-Zertifikat und Beenden via `[STRG + C]`.
+  - Auto-ServerAlive KeepAlives und ExitOnForwardFailure.
+- [x] **Interaktives Menü & TUI Integration:**
+  - Konsolenmenü-Option `[u] SSH-Tunnel` zur geführten Port-Weiterleitung.
+  - TUI-Hotkey `[U]` zur 1-Klick-Tunnel-Initiierung für den ausgewählten Server.
 
 ---
 
-### Phase 4: Live Remote Server-Stats & Quick-Health-Probe (Status: 🟡 Geplant)
-- [ ] **Ad-hoc Remote Telemetrie (`sb-ssh info <server>`):**
-  - Blitzschnelle Abfrage über non-interactive SSH in unter 1 Sekunde (ohne interaktive Login-Shell).
-- [ ] **Metriken:**
-  - **CPU-Last:** 1m / 5m / 15m Load Average.
-  - **RAM-Auslastung:** Belegter vs. freier Arbeitsspeicher in Prozent und GB.
-  - **Disk Usage:** Füllstand der Root-Partition (`/`) in Prozent mit optischer Warnung ab 85%.
+### Phase 4: Live Remote Server-Stats & Quick-Health-Probe (Status: 🟢 Erledigt)
+- [x] **Ad-hoc Remote Telemetrie (`sb-ssh info <server>`):**
+  - Blitzschnelle Abfrage über non-interactive SSH in unter 1 Sekunde (Batch-Abfrage von CPU, RAM, Disk, Uptime).
+- [x] **Metriken & Visualisierung:**
+  - **CPU-Last:** 1m / 5m / 15m Load Average mit Einstufung (`[OPTIMAL]`, `[MODERAT]`, `[HOHE LAST]`).
+  - **RAM-Auslastung:** Total, Belegt, Frei und Prozentwert mit taktischem Auslastungsbalken (`[████░░░]`).
+  - **Disk Usage:** Füllstand der Root-Partition (`/`) in GB und Prozent mit freiem Speicherplatz.
   - **Uptime:** Systemlaufzeit seit dem letzten Reboot.
-- [ ] **TUI Integration (`[I]` für Quick-Inspect):**
-  - Zeigt Live-Balken / Sparklines für CPU, RAM und Disk direkt im Detailbereich der ausgewählten Server-Zeile an.
+- [x] **Interaktives Menü & TUI Integration:**
+  - Menüoption `[i] Health-Probe` im Konsolenmenü.
+  - TUI-Hotkey `[I]` zur sofortigen Inspektion des markierten Servers.
 
 ---
 
