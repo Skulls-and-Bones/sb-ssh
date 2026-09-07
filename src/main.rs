@@ -692,46 +692,19 @@ async fn handle_tui() {
             Ok(Some(TuiAction::Connect(server))) => {
                 let session = load_session();
                 let _ = run_ssh_session(&server, session.as_ref()).await;
-                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                println!("\nDrücke [ENTER] um zur Serverliste zurückzukehren...");
                 let mut buf = String::new();
                 let _ = std::io::stdin().read_line(&mut buf);
             }
             Ok(Some(TuiAction::TriggerLogin)) => {
                 let _ = run_oauth_flow("github").await;
-                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                println!("\nDrücke [ENTER] um zur Serverliste zurückzukehren...");
                 let mut buf = String::new();
                 let _ = std::io::stdin().read_line(&mut buf);
             }
             Ok(Some(TuiAction::TriggerAdd)) => {
                 handle_interactive_add();
-                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
-                let mut buf = String::new();
-                let _ = std::io::stdin().read_line(&mut buf);
-            }
-            Ok(Some(TuiAction::TriggerEdit(server))) => {
-                handle_interactive_edit(Some(&server.name));
-                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
-                let mut buf = String::new();
-                let _ = std::io::stdin().read_line(&mut buf);
-            }
-            Ok(Some(TuiAction::TriggerInfo(server))) => {
-                handle_interactive_info(Some(&server.name)).await;
-            }
-            Ok(Some(TuiAction::TriggerTunnel(server))) => {
-                handle_interactive_tunnel(Some(&server.name)).await;
-                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
-                let mut buf = String::new();
-                let _ = std::io::stdin().read_line(&mut buf);
-            }
-            Ok(Some(TuiAction::TriggerTransfer(server))) => {
-                handle_interactive_transfer(Some(&server.name)).await;
-                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
-                let mut buf = String::new();
-                let _ = std::io::stdin().read_line(&mut buf);
-            }
-            Ok(Some(TuiAction::TriggerExec(server))) => {
-                handle_interactive_exec(Some(&server.name)).await;
-                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                println!("\nDrücke [ENTER] um zur Serverliste zurückzukehren...");
                 let mut buf = String::new();
                 let _ = std::io::stdin().read_line(&mut buf);
             }

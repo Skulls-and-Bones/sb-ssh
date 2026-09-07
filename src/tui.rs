@@ -21,11 +21,6 @@ pub enum TuiAction {
     Connect(ServerEntry),
     TriggerLogin,
     TriggerAdd,
-    TriggerEdit(ServerEntry),
-    TriggerTunnel(ServerEntry),
-    TriggerInfo(ServerEntry),
-    TriggerTransfer(ServerEntry),
-    TriggerExec(ServerEntry),
     Quit,
 }
 
@@ -36,9 +31,6 @@ pub struct TuiApp {
     pub table_state: TableState,
     pub latencies: Vec<Option<Duration>>,
     pub confirm_delete: bool,
-    pub show_help: bool,
-    pub filter_query: String,
-    pub is_filtering: bool,
 }
 
 impl TuiApp {
@@ -61,47 +53,19 @@ impl TuiApp {
             table_state,
             latencies,
             confirm_delete: false,
-            show_help: false,
-            filter_query: String::new(),
-            is_filtering: false,
-        }
-    }
-
-    pub fn filtered_indices(&self) -> Vec<usize> {
-        if self.filter_query.trim().is_empty() {
-            (0..self.vault.servers.len()).collect()
-        } else {
-            let q = self.filter_query.to_lowercase();
-            self.vault.servers.iter().enumerate()
-                .filter(|(_, s)| {
-                    s.name.to_lowercase().contains(&q)
-                        || s.host.to_lowercase().contains(&q)
-                        || s.user.to_lowercase().contains(&q)
-                        || s.tags.iter().any(|t| t.to_lowercase().contains(&q))
-                        || s.description.as_deref().unwrap_or("").to_lowercase().contains(&q)
-                })
-                .map(|(idx, _)| idx)
-                .collect()
         }
     }
 
     pub fn selected_server(&self) -> Option<&ServerEntry> {
-        let indices = self.filtered_indices();
-        indices.get(self.selected_index).and_then(|&orig_idx| self.vault.servers.get(orig_idx))
-    }
-
-    pub fn selected_latency(&self) -> Option<Duration> {
-        let indices = self.filtered_indices();
-        indices.get(self.selected_index).and_then(|&orig_idx| self.latencies.get(orig_idx).copied().flatten())
+        self.vault.servers.get(self.selected_index)
     }
 
     pub fn reload(&mut self) {
         self.vault = load_vault();
-        let indices = self.filtered_indices();
-        if self.selected_index >= indices.len() && !indices.is_empty() {
-            self.selected_index = indices.len() - 1;
+        if self.selected_index >= self.vault.servers.len() && !self.vault.servers.is_empty() {
+            self.selected_index = self.vault.servers.len() - 1;
         }
-        if indices.is_empty() {
+        if self.vault.servers.is_empty() {
             self.table_state.select(None);
         } else {
             self.table_state.select(Some(self.selected_index));
@@ -116,17 +80,15 @@ impl TuiApp {
     }
 
     pub fn next(&mut self) {
-        let count = self.filtered_indices().len();
-        if count == 0 { return; }
-        self.selected_index = (self.selected_index + 1) % count;
+        if self.vault.servers.is_empty() { return; }
+        self.selected_index = (self.selected_index + 1) % self.vault.servers.len();
         self.table_state.select(Some(self.selected_index));
     }
 
     pub fn previous(&mut self) {
-        let count = self.filtered_indices().len();
-        if count == 0 { return; }
+        if self.vault.servers.is_empty() { return; }
         if self.selected_index == 0 {
-            self.selected_index = count - 1;
+            self.selected_index = self.vault.servers.len() - 1;
         } else {
             self.selected_index -= 1;
         }
@@ -139,7 +101,7 @@ pub fn run_tui() -> Result<Option<TuiAction>, String> {
     let mut stdout = stdout();
     execute!(stdout, EnterAlternateScreen).map_err(|e| e.to_string())?;
 
-    // Drain all pending events from console input buffer to avoid leftover keys
+    // Drain console input buffer to prevent lingering enter keys
     while event::poll(Duration::from_millis(50)).unwrap_or(false) {
         let _ = event::read();
     }
@@ -170,52 +132,7 @@ fn run_loop(
                     continue;
                 }
 
-                // 1. In Live-Filter Mode
-                if app.is_filtering {
-                    match key.code {
-                        KeyCode::Esc => {
-                            app.is_filtering = false;
-                        }
-                        KeyCode::Enter => {
-                            app.is_filtering = false;
-                        }
-                        KeyCode::Backspace => {
-                            app.filter_query.pop();
-                            app.selected_index = 0;
-                            let count = app.filtered_indices().len();
-                            if count > 0 {
-                                app.table_state.select(Some(0));
-                            } else {
-                                app.table_state.select(None);
-                            }
-                        }
-                        KeyCode::Char(c) => {
-                            app.filter_query.push(c);
-                            app.selected_index = 0;
-                            let count = app.filtered_indices().len();
-                            if count > 0 {
-                                app.table_state.select(Some(0));
-                            } else {
-                                app.table_state.select(None);
-                            }
-                        }
-                        _ => {}
-                    }
-                    continue;
-                }
-
-                // 2. In Help Modal
-                if app.show_help {
-                    match key.code {
-                        KeyCode::Char('?') | KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => {
-                            app.show_help = false;
-                        }
-                        _ => {}
-                    }
-                    continue;
-                }
-
-                // 3. In Delete Confirmation Modal
+                // Delete-Bestätigungsdialog
                 if app.confirm_delete {
                     match key.code {
                         KeyCode::Char('j') | KeyCode::Char('y') | KeyCode::Enter => {
@@ -234,54 +151,14 @@ fn run_loop(
                     continue;
                 }
 
-                // 4. Standard Navigation & Shortcuts
+                // Standard-Tasten
                 match key.code {
-                    KeyCode::Char('q') => return Ok(Some(TuiAction::Quit)),
-                    KeyCode::Esc => {
-                        if !app.filter_query.is_empty() {
-                            app.filter_query.clear();
-                            app.selected_index = 0;
-                            app.table_state.select(Some(0));
-                        } else {
-                            return Ok(Some(TuiAction::Quit));
-                        }
-                    }
-                    KeyCode::Char('?') | KeyCode::F(1) => {
-                        app.show_help = true;
-                    }
-                    KeyCode::Char('/') => {
-                        app.is_filtering = true;
-                    }
+                    KeyCode::Char('q') | KeyCode::Esc => return Ok(Some(TuiAction::Quit)),
                     KeyCode::Down | KeyCode::Char('j') => app.next(),
                     KeyCode::Up | KeyCode::Char('k') => app.previous(),
                     KeyCode::Char('l') => return Ok(Some(TuiAction::TriggerLogin)),
                     KeyCode::Char('r') => app.refresh_latencies(),
-                    KeyCode::Char('i') => {
-                        if let Some(server) = app.selected_server() {
-                            return Ok(Some(TuiAction::TriggerInfo(server.clone())));
-                        }
-                    }
-                    KeyCode::Char('u') => {
-                        if let Some(server) = app.selected_server() {
-                            return Ok(Some(TuiAction::TriggerTunnel(server.clone())));
-                        }
-                    }
-                    KeyCode::Char('p') => {
-                        if let Some(server) = app.selected_server() {
-                            return Ok(Some(TuiAction::TriggerTransfer(server.clone())));
-                        }
-                    }
-                    KeyCode::Char('x') => {
-                        if let Some(server) = app.selected_server() {
-                            return Ok(Some(TuiAction::TriggerExec(server.clone())));
-                        }
-                    }
-                    KeyCode::Char('e') => {
-                        if let Some(server) = app.selected_server() {
-                            return Ok(Some(TuiAction::TriggerEdit(server.clone())));
-                        }
-                    }
-                    KeyCode::Char('d') | KeyCode::Delete => {
+                    KeyCode::Char('d') | KeyCode::Char('x') | KeyCode::Delete => {
                         if app.selected_server().is_some() {
                             app.confirm_delete = true;
                         }
@@ -304,48 +181,31 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(4), // Header / Brand & Session
-            Constraint::Min(10),   // Main Split (Table + Inspector)
-            Constraint::Length(3), // Hotkey Footer
+            Constraint::Length(3), // Schlanker Header
+            Constraint::Min(6),    // Aufgeräumte Server-Tabelle
+            Constraint::Length(3), // Übersichtliche Fußzeile
         ])
         .split(f.area());
 
-    // ── 1. HEADER & BRAND BAR ──────────────────────────────────────
-    let online_count = app.latencies.iter().filter(|d| d.is_some()).count();
-    let total_count = app.vault.servers.len();
-
+    // ── 1. HEADER ──────────────────────────────────────────────────
     let header_lines = vec![
         Line::from(vec![
-            Span::styled("  ⚡ ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled("SKULLS & BONES ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled("  SKULLS & BONES ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::styled("// ", Style::default().fg(Color::DarkGray)),
-            Span::styled("NETGATE ZERO-KEY SSH ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-            Span::styled("v0.1.0 ", Style::default().fg(Color::Rgb(59, 130, 246))),
-            Span::styled("[ SECURE TACTICAL FLEET VAULT ]", Style::default().fg(Color::DarkGray)),
+            Span::styled("SSH ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("({} Server)", app.vault.servers.len()), Style::default().fg(Color::DarkGray)),
         ]),
         Line::from(vec![
-            if app.session.is_some() {
-                Span::styled("  [✓ AUTH] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+            if let Some(ref sess) = app.session {
+                Span::styled(format!("  [✓] Angemeldet: {} ", sess.username), Style::default().fg(Color::Green))
             } else {
-                Span::styled("  [! LOKAL] ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+                Span::styled("  [!] Lokale Schlüssel (Drücke [L] für Login) ", Style::default().fg(Color::Yellow))
             },
             if let Some(ref sess) = app.session {
-                Span::styled(format!("{} ({}) ", sess.username, sess.provider), Style::default().fg(Color::White))
+                Span::styled(format!("• Restzeit: {}", sess.time_remaining_str()), Style::default().fg(Color::DarkGray))
             } else {
-                Span::styled("Ephemeres Ed25519-CA Aktiv ", Style::default().fg(Color::Gray))
+                Span::raw("")
             },
-            Span::styled("• ", Style::default().fg(Color::DarkGray)),
-            if let Some(ref sess) = app.session {
-                Span::styled(format!("⏳ {} ", sess.time_remaining_str()), Style::default().fg(Color::Yellow))
-            } else {
-                Span::styled("🔐 Bereit ", Style::default().fg(Color::DarkGray))
-            },
-            Span::styled("• ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("🖥️  {} Server ", total_count), Style::default().fg(Color::Cyan)),
-            Span::styled("• ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("⚡ {} Online ", online_count), Style::default().fg(Color::Green)),
-            Span::styled("• ", Style::default().fg(Color::DarkGray)),
-            Span::styled("🛡️  Zero-Key-Sprawl", Style::default().fg(Color::Rgb(96, 165, 250))),
         ]),
     ];
 
@@ -357,57 +217,20 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
     );
     f.render_widget(header_widget, chunks[0]);
 
-    // ── 2. MAIN SPLIT (SERVER FLEET + INSPECTOR) ───────────────────
-    let main_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(62), // Server Table
-            Constraint::Percentage(38), // Inspector Card
-        ])
-        .split(chunks[1]);
-
-    // 2a. Server Fleet Table
-    let filter_title = if !app.filter_query.is_empty() {
-        format!(" 🖥️  SERVER TREESOR [Filter: '{}'] ", app.filter_query)
-    } else {
-        " 🖥️  SERVER TREESOR ".to_string()
-    };
-
-    let table_block = Block::default()
-        .title(Span::styled(
-            filter_title,
-            if !app.filter_query.is_empty() {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-            },
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(
-            if app.is_filtering {
-                Color::Yellow
-            } else {
-                Color::Rgb(45, 55, 75)
-            },
-        ));
-
-    let header_cells = ["STATUS", "SERVER ALIAS", "HOST : PORT", "USER", "TAGS", "LATENZ"]
+    // ── 2. SERVER TABELLE ──────────────────────────────────────────
+    let header_cells = ["STATUS", "NAME", "HOST : PORT", "BENUTZER", "TAGS", "PING"]
         .iter()
-        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Rgb(56, 189, 248)).add_modifier(Modifier::BOLD)));
+        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
     let header_row = Row::new(header_cells).height(1).bottom_margin(1);
 
-    let filtered = app.filtered_indices();
-
-    let rows: Vec<Row> = filtered.iter().map(|&orig_idx| {
-        let s = &app.vault.servers[orig_idx];
-        let lat_opt = app.latencies.get(orig_idx).copied().flatten();
+    let rows: Vec<Row> = app.vault.servers.iter().enumerate().map(|(idx, s)| {
+        let lat_opt = app.latencies.get(idx).copied().flatten();
         let (lat_str, status_cell) = match lat_opt {
             Some(d) => {
                 let ms = d.as_secs_f64() * 1000.0;
-                let color = if ms < 50.0 {
+                let color = if ms < 60.0 {
                     Color::Green
-                } else if ms < 150.0 {
+                } else if ms < 160.0 {
                     Color::Yellow
                 } else {
                     Color::Red
@@ -430,7 +253,7 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
             Cell::from(s.name.clone()).style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
             Cell::from(format!("{}:{}", s.host, s.port)).style(Style::default().fg(Color::Rgb(148, 163, 184))),
             Cell::from(s.user.clone()).style(Style::default().fg(Color::Yellow)),
-            Cell::from(tags_str).style(Style::default().fg(Color::Rgb(192, 132, 252))),
+            Cell::from(tags_str).style(Style::default().fg(Color::Blue)),
             lat_str,
         ];
         Row::new(cells).height(1)
@@ -439,178 +262,42 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
     let table = Table::new(
         rows,
         [
-            Constraint::Length(11), // Status
-            Constraint::Length(16), // Name
-            Constraint::Length(22), // Host:Port
-            Constraint::Length(10), // User
-            Constraint::Length(18), // Tags
-            Constraint::Length(11), // Latenz
+            Constraint::Length(12), // Status
+            Constraint::Length(20), // Name
+            Constraint::Length(24), // Host:Port
+            Constraint::Length(14), // User
+            Constraint::Length(22), // Tags
+            Constraint::Length(12), // Ping
         ],
     )
     .header(header_row)
-    .block(table_block)
+    .block(
+        Block::default()
+            .title(Span::styled(" [ SERVER LISTE ] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Rgb(45, 55, 75))),
+    )
     .row_highlight_style(
         Style::default()
             .bg(Color::Rgb(30, 64, 175))
             .fg(Color::White)
             .add_modifier(Modifier::BOLD),
     )
-    .highlight_symbol(" ❯❯ ");
+    .highlight_symbol(" ❯ ");
 
-    f.render_stateful_widget(table, main_chunks[0], &mut app.table_state);
+    f.render_stateful_widget(table, chunks[1], &mut app.table_state);
 
-    // 2b. Server Inspector Card (Right Panel)
-    let inspector_block = Block::default()
-        .title(Span::styled(" 🔍  SERVER TELEMETRIE & DETAILS ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Rgb(45, 55, 75)));
-
-    let inspector_content = if let Some(srv) = app.selected_server() {
-        let lat_opt = app.selected_latency();
-        let (signal_bar, signal_quality, signal_color) = latency_bar(lat_opt);
-        let lat_str = match lat_opt {
-            Some(d) => format!("{:.1} ms", d.as_secs_f64() * 1000.0),
-            None => "Keine Antwort".to_string(),
-        };
-
-        let last_conn_str = srv.last_connected
-            .map(|d| d.format("%d.%m.%Y %H:%M").to_string())
-            .unwrap_or_else(|| "Bisher keine".to_string());
-
-        let tags_badges: Vec<Span> = if srv.tags.is_empty() {
-            vec![Span::styled("keine", Style::default().fg(Color::DarkGray))]
-        } else {
-            srv.tags.iter().map(|t| {
-                Span::styled(format!("[{}] ", t), Style::default().fg(Color::Rgb(168, 85, 247)))
-            }).collect()
-        };
-
-        let lines = vec![
-            Line::from(vec![
-                Span::styled("── ENDPUNKT & IDENTITÄT ──────────────────────────", Style::default().fg(Color::DarkGray)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Alias:       ", Style::default().fg(Color::DarkGray)),
-                Span::styled(&srv.name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Adresse:     ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}:{}", srv.host, srv.port), Style::default().fg(Color::Cyan)),
-            ]),
-            Line::from(vec![
-                Span::styled("  SSH-User:    ", Style::default().fg(Color::DarkGray)),
-                Span::styled(&srv.user, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            ]),
-            Line::from({
-                let mut p = vec![Span::styled("  Tags:        ", Style::default().fg(Color::DarkGray))];
-                p.extend(tags_badges);
-                p
-            }),
-            Line::from(vec![
-                Span::styled("  Info:        ", Style::default().fg(Color::DarkGray)),
-                Span::styled(srv.description.as_deref().unwrap_or("Keine Beschreibung"), Style::default().fg(Color::Gray)),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("── NETZWERK TELEMETRIE ───────────────────────────", Style::default().fg(Color::DarkGray)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Status:      ", Style::default().fg(Color::DarkGray)),
-                if lat_opt.is_some() {
-                    Span::styled("● ONLINE", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
-                } else {
-                    Span::styled("○ OFFLINE", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
-                },
-                Span::styled(format!(" ({})", lat_str), Style::default().fg(Color::Gray)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Signal:      ", Style::default().fg(Color::DarkGray)),
-                Span::styled(signal_bar, Style::default().fg(signal_color).add_modifier(Modifier::BOLD)),
-                Span::styled(format!(" {}", signal_quality), Style::default().fg(signal_color)),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("── SICHERHEIT & CRYPTO ───────────────────────────", Style::default().fg(Color::DarkGray)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Engine:      ", Style::default().fg(Color::DarkGray)),
-                Span::styled("100% Pure-Rust (russh + SFTP)", Style::default().fg(Color::Green)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Zertifikat:  ", Style::default().fg(Color::DarkGray)),
-                Span::styled("S&B Ephemeral Ed25519 (8h)", Style::default().fg(Color::Cyan)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Letzter S&B: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(last_conn_str, Style::default().fg(Color::Gray)),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("── SCHNELL-AKTIONEN ──────────────────────────────", Style::default().fg(Color::DarkGray)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [ENTER] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled("Verbinden (PTY)    ", Style::default().fg(Color::White)),
-                Span::styled("[I] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                Span::styled("Health-Probe", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [U]     ", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)),
-                Span::styled("TCP-Tunnel         ", Style::default().fg(Color::White)),
-                Span::styled("[P] ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-                Span::styled("SFTP Transfer", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [X]     ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::styled("Remote Exec        ", Style::default().fg(Color::White)),
-                Span::styled("[E] ", Style::default().fg(Color::Rgb(96, 165, 250)).add_modifier(Modifier::BOLD)),
-                Span::styled("Bearbeiten", Style::default().fg(Color::White)),
-            ]),
-        ];
-        lines
-    } else {
-        vec![
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  Kein Server ausgewählt.", Style::default().fg(Color::Yellow)),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  Drücke ", Style::default().fg(Color::Gray)),
-                Span::styled("[+] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled("um einen neuen Server hinzuzufügen.", Style::default().fg(Color::Gray)),
-            ]),
-        ]
-    };
-
-    let inspector_widget = Paragraph::new(inspector_content).block(inspector_block);
-    f.render_widget(inspector_widget, main_chunks[1]);
-
-    // ── 3. FOOTER SHORTCUT BAR ─────────────────────────────────────
+    // ── 3. FOOTER ──────────────────────────────────────────────────
     let footer_spans = vec![
         Span::styled(" [ENTER] ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::styled(" Connect  ", Style::default().fg(Color::White)),
-        Span::styled(" [I] ", Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
-        Span::styled(" Probe  ", Style::default().fg(Color::White)),
-        Span::styled(" [U] ", Style::default().fg(Color::Black).bg(Color::Blue).add_modifier(Modifier::BOLD)),
-        Span::styled(" Tunnel  ", Style::default().fg(Color::White)),
-        Span::styled(" [P] ", Style::default().fg(Color::Black).bg(Color::Magenta).add_modifier(Modifier::BOLD)),
-        Span::styled(" SFTP  ", Style::default().fg(Color::White)),
-        Span::styled(" [X] ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::styled(" Exec  ", Style::default().fg(Color::White)),
-        Span::styled(" [+] ", Style::default().fg(Color::Black).bg(Color::LightCyan).add_modifier(Modifier::BOLD)),
-        Span::styled(" Neu  ", Style::default().fg(Color::White)),
-        Span::styled(" [E] ", Style::default().fg(Color::Black).bg(Color::Rgb(96, 165, 250)).add_modifier(Modifier::BOLD)),
-        Span::styled(" Edit  ", Style::default().fg(Color::White)),
+        Span::styled(" Verbinden    ", Style::default().fg(Color::White)),
+        Span::styled(" [+] ", Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled(" Hinzufügen    ", Style::default().fg(Color::White)),
         Span::styled(" [D] ", Style::default().fg(Color::Black).bg(Color::Red).add_modifier(Modifier::BOLD)),
-        Span::styled(" Löschen  ", Style::default().fg(Color::White)),
-        Span::styled(" [/] ", Style::default().fg(Color::Black).bg(Color::LightYellow).add_modifier(Modifier::BOLD)),
-        Span::styled(" Filter  ", Style::default().fg(Color::White)),
-        Span::styled(" [R] ", Style::default().fg(Color::Black).bg(Color::LightGreen).add_modifier(Modifier::BOLD)),
-        Span::styled(" Ping  ", Style::default().fg(Color::White)),
-        Span::styled(" [?] ", Style::default().fg(Color::Black).bg(Color::White).add_modifier(Modifier::BOLD)),
-        Span::styled(" Hilfe  ", Style::default().fg(Color::White)),
+        Span::styled(" Löschen    ", Style::default().fg(Color::White)),
+        Span::styled(" [R] ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(" Ping    ", Style::default().fg(Color::White)),
         Span::styled(" [Q] ", Style::default().fg(Color::Black).bg(Color::DarkGray).add_modifier(Modifier::BOLD)),
         Span::styled(" Beenden", Style::default().fg(Color::White)),
     ];
@@ -623,35 +310,10 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
     );
     f.render_widget(footer_widget, chunks[2]);
 
-    // ── 4. POPUPS & MODALS (OVERLAYS) ──────────────────────────────
-    // 4a. Live Filter Bar
-    if app.is_filtering {
-        let filter_area = centered_rect(58, 5, f.area());
-        f.render_widget(Clear, filter_area);
-
-        let filter_lines = vec![
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  Suchbegriff: ", Style::default().fg(Color::Gray)),
-                Span::styled(&app.filter_query, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                Span::styled("█", Style::default().fg(Color::Yellow).add_modifier(Modifier::SLOW_BLINK)),
-            ]),
-        ];
-
-        let filter_box = Paragraph::new(filter_lines).block(
-            Block::default()
-                .title(" 🔍  SERVER LIVE-FILTER (Esc = Abbrechen, Enter = Anwenden) ")
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Yellow)),
-        );
-        f.render_widget(filter_box, filter_area);
-    }
-
-    // 4b. Delete Confirmation Modal
+    // ── 4. LÖSCH-BESTÄTIGUNGSDIALOG ────────────────────────────────
     if app.confirm_delete {
         let name = app.selected_server().map(|s| s.name.as_str()).unwrap_or("Server");
-        let delete_area = centered_rect(56, 7, f.area());
+        let delete_area = centered_rect(54, 7, f.area());
         f.render_widget(Clear, delete_area);
 
         let delete_lines = vec![
@@ -659,7 +321,7 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
             Line::from(vec![
                 Span::styled("  Möchtest du '", Style::default().fg(Color::White)),
                 Span::styled(name, Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-                Span::styled("' wirklich aus dem Tresor löschen?", Style::default().fg(Color::White)),
+                Span::styled("' wirklich löschen?", Style::default().fg(Color::White)),
             ]),
             Line::from(""),
             Line::from(vec![
@@ -672,94 +334,12 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
 
         let delete_box = Paragraph::new(delete_lines).block(
             Block::default()
-                .title(" ⚠️  SERVER LÖSCHEN  ")
+                .title(" ⚠️  SERVER LÖSCHEN ")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Double)
                 .border_style(Style::default().fg(Color::Red)),
         );
         f.render_widget(delete_box, delete_area);
-    }
-
-    // 4c. Help Modal
-    if app.show_help {
-        let help_area = centered_rect(68, 20, f.area());
-        f.render_widget(Clear, help_area);
-
-        let help_lines = vec![
-            Line::from(vec![
-                Span::styled("  TASTENKOMBINATIONEN & BEDIENUNG", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  [↑ / k] [↓ / j]   ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::styled("In der Serverliste navigieren", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [ENTER]           ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled("Direkte SSH2-Terminalverbindung (mit Ephemeral-Cert)", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [I]               ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                Span::styled("System Health Probe (CPU, RAM, Disk, Uptime)", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [U]               ", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)),
-                Span::styled("SSH Portweiterleitung (Lokaler TCP-Tunnel)", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [P]               ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-                Span::styled("SFTP Datei-Transfer (Upload / Download)", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [X]               ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::styled("Multi-Server Broadcast Remote Execution", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [+ / A]           ", Style::default().fg(Color::LightCyan).add_modifier(Modifier::BOLD)),
-                Span::styled("Neuen Server zum Tresor hinzufügen", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [E]               ", Style::default().fg(Color::Rgb(96, 165, 250)).add_modifier(Modifier::BOLD)),
-                Span::styled("Ausgewählten Server bearbeiten", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [D / Entf]        ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-                Span::styled("Server dauerhaft löschen (mit Bestätigung)", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [/]               ", Style::default().fg(Color::LightYellow).add_modifier(Modifier::BOLD)),
-                Span::styled("Live-Filter starten (Server suchen)", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [R]               ", Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)),
-                Span::styled("Latenzen aller Server neu anpingen", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [L]               ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled("OAuth2 / OIDC Browser-Login", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [? / F1]          ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                Span::styled("Dieses Hilfefenster öffnen / schließen", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("  [Q / Esc]         ", Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-                Span::styled("TUI beenden", Style::default().fg(Color::White)),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  Drücke [ESC] oder [?] um dieses Fenster zu schließen.", Style::default().fg(Color::DarkGray)),
-            ]),
-        ];
-
-        let help_box = Paragraph::new(help_lines).block(
-            Block::default()
-                .title(" 📖  SKULLS & BONES // NETGATE TUI HILFE  ")
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Cyan)),
-        );
-        f.render_widget(help_box, help_area);
     }
 }
 
@@ -771,23 +351,4 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     Rect { x, y, width: w, height: h }
 }
 
-fn latency_bar(latency: Option<Duration>) -> (String, &'static str, Color) {
-    match latency {
-        Some(d) => {
-            let ms = d.as_secs_f64() * 1000.0;
-            if ms < 35.0 {
-                ("[■■■■■■■■■■■■■■■]".to_string(), "Exzellent", Color::Green)
-            } else if ms < 80.0 {
-                ("[■■■■■■■■■■■■□□□]".to_string(), "Sehr gut", Color::Green)
-            } else if ms < 150.0 {
-                ("[■■■■■■■■□□□□□□□]".to_string(), "Gut", Color::Yellow)
-            } else if ms < 300.0 {
-                ("[■■■■■□□□□□□□□□□]".to_string(), "Moderat", Color::Rgb(245, 158, 11))
-            } else {
-                ("[■■□□□□□□□□□□□□□]".to_string(), "Langsam", Color::Red)
-            }
-        }
-        None => ("[□□□□□□□□□□□□□□□]".to_string(), "Offline", Color::DarkGray),
-    }
-}
 
