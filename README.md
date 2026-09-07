@@ -9,6 +9,10 @@
 [![Compliance](https://img.shields.io/badge/BSI_IT--Grundschutz-OPS.1.1.4_%26_DER.1-brightgreen.svg?style=flat-square)](https://www.bsi.bund.de)
 [![Zero-Dependency](https://img.shields.io/badge/Dependencies-100%25_Pure--Rust-blueviolet.svg?style=flat-square)](#)
 
+<p align="center">
+  <img src="assets/tui_preview.svg" alt="S&B NetGate TUI Dashboard" width="880">
+</p>
+
 ---
 
 ## ⚡ Das Problem mit herkömmlichem SSH
@@ -123,6 +127,10 @@ sb-ssh audit --json
 # Aufgezeichnete Sitzung im Terminal abspielen:
 sb-ssh replay sb-20260907-182353-04a1
 ```
+
+<p align="center">
+  <img src="assets/audit_preview.svg" alt="S&B NetGate BSI Session Audit" width="880">
+</p>
 
 ---
 

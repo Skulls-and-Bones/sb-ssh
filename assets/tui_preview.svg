@@ -1,0 +1,168 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070A0F"/>
+      <stop offset="100%" stop-color="#0E131F"/>
+    </linearGradient>
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#1E2638"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.4"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000" flood-opacity="0.8"/>
+    </filter>
+  </defs>
+
+  <style>
+    .font-mono { font-family: ui-monospace, SFMono-Regular, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
+    .title { font-weight: 800; font-size: 14px; fill: #F3F4F6; }
+    .sub { font-size: 12px; fill: #9CA3AF; }
+    .badge-green { font-size: 11px; fill: #10B981; font-weight: 700; }
+    .badge-amber { font-size: 11px; fill: #F59E0B; font-weight: 700; }
+    .col-header { font-size: 11px; fill: #6B7280; font-weight: 800; letter-spacing: 1px; }
+    .row-text { font-size: 12px; fill: #E5E7EB; }
+    .row-highlight { fill: #1E2638; fill-opacity: 0.7; }
+    .server-name { font-size: 13px; font-weight: 700; fill: #FFFFFF; }
+    .user { fill: #38BDF8; font-weight: 600; }
+    .ping-fast { fill: #10B981; font-weight: 700; }
+    .ping-mid { fill: #38BDF8; font-weight: 700; }
+    .tag { fill: #9CA3AF; }
+    .key-btn { fill: #F59E0B; font-weight: 700; }
+    .key-lbl { fill: #D1D5DB; }
+  </style>
+
+  <!-- Window Frame Container -->
+  <g filter="url(#shadow)">
+    <!-- Outer Glow Border -->
+    <rect x="20" y="20" width="920" height="480" rx="14" fill="none" stroke="url(#borderGrad)" stroke-width="1.5"/>
+    <!-- Terminal Background -->
+    <rect x="21" y="21" width="918" height="478" rx="13" fill="url(#bgGrad)"/>
+  </g>
+
+  <!-- Window Titlebar -->
+  <g transform="translate(20, 20)">
+    <path d="M 1,0 L 917,0 A 13,13 0 0,1 918,13 L 918,44 L 0,44 L 0,13 A 13,13 0 0,1 1,0 Z" fill="#0A0D14"/>
+    <line x1="0" y1="44" x2="918" y2="44" stroke="#1E2638" stroke-width="1"/>
+
+    <!-- Mac/Terminal Window Dots -->
+    <circle cx="28" cy="22" r="6" fill="#EF4444" fill-opacity="0.85"/>
+    <circle cx="48" cy="22" r="6" fill="#F59E0B" fill-opacity="0.85"/>
+    <circle cx="68" cy="22" r="6" fill="#10B981" fill-opacity="0.85"/>
+
+    <!-- Window Title -->
+    <text x="460" y="27" text-anchor="middle" class="font-mono" font-size="12" fill="#9CA3AF" font-weight="600">
+      sb-ssh — S&amp;B NetGate // Zero-Trust Terminal v0.1.0
+    </text>
+
+    <!-- Version & Pure-Rust Pill -->
+    <rect x="780" y="12" width="120" height="20" rx="4" fill="#1E2638" fill-opacity="0.6"/>
+    <text x="840" y="26" text-anchor="middle" class="font-mono" font-size="10" fill="#10B981" font-weight="700">
+      100% PURE RUST
+    </text>
+  </g>
+
+  <!-- Brand & Auth Status Header -->
+  <g transform="translate(50, 85)" class="font-mono">
+    <!-- Header Box -->
+    <rect x="0" y="0" width="860" height="52" rx="8" fill="#111726" stroke="#1E2638" stroke-width="1"/>
+    
+    <text x="20" y="24" class="title">SKULLS &amp; BONES <tspan fill="#38BDF8">//</tspan> NETGATE</text>
+    <text x="20" y="42" class="sub">Tactical Zero-Trust SSH CLI &amp; Infrastructure Gateway</text>
+
+    <!-- Session Badge -->
+    <rect x="570" y="13" width="270" height="26" rx="5" fill="#0A0D12" stroke="#10B981" stroke-width="1" stroke-opacity="0.5"/>
+    <circle cx="585" cy="26" r="4" fill="#10B981"/>
+    <text x="598" y="30" class="badge-green">Session: leonf • Restzeit: 7h 48m</text>
+  </g>
+
+  <!-- Server Table -->
+  <g transform="translate(50, 155)" class="font-mono">
+    <!-- Table Outer Box -->
+    <rect x="0" y="0" width="860" height="255" rx="8" fill="#0A0D14" stroke="#1E2638" stroke-width="1"/>
+
+    <!-- Table Header Line -->
+    <rect x="1" y="1" width="858" height="34" fill="#101726" rx="7"/>
+    <line x1="0" y1="35" x2="860" y2="35" stroke="#1E2638" stroke-width="1"/>
+
+    <!-- Column Headers -->
+    <text x="25" y="23" class="col-header">STATUS</text>
+    <text x="140" y="23" class="col-header">NAME</text>
+    <text x="320" y="23" class="col-header">HOST : PORT</text>
+    <text x="510" y="23" class="col-header">BENUTZER</text>
+    <text x="630" y="23" class="col-header">TAGS</text>
+    <text x="780" y="23" class="col-header">PING</text>
+
+    <!-- Row 1: Selected / Highlighted -->
+    <rect x="4" y="39" width="852" height="40" rx="6" class="row-highlight" stroke="#38BDF8" stroke-width="1" stroke-opacity="0.5"/>
+    <circle cx="28" cy="59" r="4" fill="#10B981"/>
+    <text x="40" y="63" class="badge-green">ONLINE</text>
+    <text x="140" y="64" class="server-name">hostinger-prod</text>
+    <text x="320" y="64" class="row-text">145.223.83.235:22</text>
+    <text x="510" y="64" class="user">leonf</text>
+    <text x="630" y="64" class="tag">prod, web, nginx</text>
+    <text x="780" y="64" class="ping-fast">24.2 ms</text>
+
+    <!-- Row 2 -->
+    <line x1="15" y1="82" x2="845" y2="82" stroke="#151C2C" stroke-width="1"/>
+    <circle cx="28" cy="101" r="4" fill="#10B981"/>
+    <text x="40" y="105" class="badge-green">ONLINE</text>
+    <text x="140" y="106" class="server-name">bastion-dmz</text>
+    <text x="320" y="106" class="row-text">10.0.0.1:22</text>
+    <text x="510" y="106" class="user">root</text>
+    <text x="630" y="106" class="tag">dmz, jump, edge</text>
+    <text x="780" y="106" class="ping-fast">8.5 ms</text>
+
+    <!-- Row 3 -->
+    <line x1="15" y1="124" x2="845" y2="124" stroke="#151C2C" stroke-width="1"/>
+    <circle cx="28" cy="143" r="4" fill="#10B981"/>
+    <text x="40" y="147" class="badge-green">ONLINE</text>
+    <text x="140" y="148" class="server-name">db-internal</text>
+    <text x="320" y="148" class="row-text">10.0.1.5:22 <tspan fill="#38BDF8" font-size="10">(via bastion)</tspan></text>
+    <text x="510" y="148" class="user">postgres</text>
+    <text x="630" y="148" class="tag">prod, database</text>
+    <text x="780" y="148" class="ping-fast">28.4 ms</text>
+
+    <!-- Row 4 -->
+    <line x1="15" y1="166" x2="845" y2="166" stroke="#151C2C" stroke-width="1"/>
+    <circle cx="28" cy="185" r="4" fill="#10B981"/>
+    <text x="40" y="189" class="badge-green">ONLINE</text>
+    <text x="140" y="190" class="server-name">k8s-control-01</text>
+    <text x="320" y="190" class="row-text">192.168.1.10:22</text>
+    <text x="510" y="190" class="user">admin</text>
+    <text x="630" y="190" class="tag">k8s, cluster</text>
+    <text x="780" y="190" class="ping-fast">12.1 ms</text>
+
+    <!-- Row 5 -->
+    <line x1="15" y1="208" x2="845" y2="208" stroke="#151C2C" stroke-width="1"/>
+    <circle cx="28" cy="227" r="4" fill="#F59E0B"/>
+    <text x="40" y="231" class="badge-amber">STANDBY</text>
+    <text x="140" y="232" class="server-name">staging-api</text>
+    <text x="320" y="232" class="row-text">145.223.83.240:22</text>
+    <text x="510" y="232" class="user">developer</text>
+    <text x="630" y="232" class="tag">stage, rust, api</text>
+    <text x="780" y="232" class="ping-mid">31.7 ms</text>
+  </g>
+
+  <!-- Bottom Command Bar / Hotkeys -->
+  <g transform="translate(50, 425)" class="font-mono">
+    <rect x="0" y="0" width="860" height="42" rx="6" fill="#0A0D12" stroke="#1E2638" stroke-width="1"/>
+    
+    <text x="25" y="26" font-size="12">
+      <tspan class="key-btn">[Enter]</tspan> <tspan class="key-lbl">Verbinden</tspan>
+      <tspan fill="#374151">  │  </tspan>
+      <tspan class="key-btn">[+]</tspan> <tspan class="key-lbl">Hinzufügen</tspan>
+      <tspan fill="#374151">  │  </tspan>
+      <tspan class="key-btn">[D]</tspan> <tspan class="key-lbl">Löschen</tspan>
+      <tspan fill="#374151">  │  </tspan>
+      <tspan class="key-btn">[R]</tspan> <tspan class="key-lbl">Neu messen</tspan>
+      <tspan fill="#374151">  │  </tspan>
+      <tspan class="key-btn">[Q]</tspan> <tspan class="key-lbl">Beenden</tspan>
+    </text>
+
+    <!-- Tactical Info Badge -->
+    <text x="835" y="26" text-anchor="end" font-size="11" fill="#4B5563">
+      BSI IT-Grundschutz (OPS.1.1.4)
+    </text>
+  </g>
+</svg>
