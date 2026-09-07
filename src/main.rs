@@ -155,13 +155,16 @@ async fn handle_interactive_selector() {
 
         println!("{}", "══════════════════════════════════════════════════════════════════════════════════════".bright_black());
         println!(
-            "  {} {}   {} {}   {} {}   {} {}",
+            "  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}   {} {}",
             "[1-N / Enter]".bright_yellow().bold(), "Verbinden",
             "[+]".bright_cyan().bold(), "Server hinzufügen",
+            "[-]".bright_red().bold(), "Server löschen",
+            "[e]".bright_magenta().bold(), "Bearbeiten",
+            "[r]".bright_yellow().bold(), "Neu messen",
             "[t]".bright_cyan().bold(), "Vollbild-TUI",
             "[q]".bright_black().bold(), "Beenden"
         );
-        print!("\n  {} Ziel auswählen [1-{}, Name oder Aktion] (Standard: [1]): ", "►".bright_cyan(), vault.servers.len().max(1));
+        print!("\n  {} Befehl oder Server wählen [1-{}, Name oder Aktion] (Standard: [1]): ", "►".bright_cyan(), vault.servers.len().max(1));
         let _ = stdout().flush();
 
         let mut input = String::new();
@@ -175,6 +178,10 @@ async fn handle_interactive_selector() {
             break;
         }
 
+        if choice.eq_ignore_ascii_case("r") || choice.eq_ignore_ascii_case("refresh") {
+            continue;
+        }
+
         if choice.eq_ignore_ascii_case("t") || choice.eq_ignore_ascii_case("tui") {
             handle_tui().await;
             continue;
@@ -184,12 +191,22 @@ async fn handle_interactive_selector() {
             handle_status();
             println!("\nDrücke [ENTER] um fortzufahren...");
             let mut _b = String::new();
-            let _ = stdin().read_line(&mut _b);
+            let _ = std::io::stdin().read_line(&mut _b);
             continue;
         }
 
         if choice == "+" || choice.eq_ignore_ascii_case("add") {
             handle_interactive_add();
+            continue;
+        }
+
+        if choice == "-" || choice.eq_ignore_ascii_case("rm") || choice.eq_ignore_ascii_case("del") || choice.eq_ignore_ascii_case("delete") {
+            handle_interactive_delete();
+            continue;
+        }
+
+        if choice.eq_ignore_ascii_case("e") || choice.eq_ignore_ascii_case("edit") {
+            handle_interactive_edit();
             continue;
         }
 
@@ -277,6 +294,124 @@ fn handle_interactive_add() {
     }
 }
 
+fn handle_interactive_delete() {
+    let vault = load_vault();
+    if vault.servers.is_empty() {
+        println!("  {} Keine Server zum Löschen vorhanden.", "!".bright_yellow());
+        return;
+    }
+
+    println!("\n{}", "── SERVER AUS DEM TRESOR ENTFERNEN ──".bright_red());
+    print!("  Welchen Server möchtest du löschen? [1-{}, Name oder Enter zum Abbrechen]: ", vault.servers.len());
+    let _ = stdout().flush();
+
+    let mut input = String::new();
+    if stdin().read_line(&mut input).is_err() { return; }
+    let choice = input.trim();
+    if choice.is_empty() { return; }
+
+    let target_name = if let Ok(num) = choice.parse::<usize>() {
+        if num >= 1 && num <= vault.servers.len() {
+            vault.servers.get(num - 1).map(|s| s.name.clone())
+        } else {
+            eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
+            return;
+        }
+    } else {
+        vault.servers.iter().find(|s| s.name.eq_ignore_ascii_case(choice)).map(|s| s.name.clone())
+    };
+
+    if let Some(name) = target_name {
+        print!("  Server '{}' wirklich löschen? [j/N]: ", name.bold());
+        let _ = stdout().flush();
+        let mut confirm = String::new();
+        let _ = stdin().read_line(&mut confirm);
+        if confirm.trim().eq_ignore_ascii_case("j") || confirm.trim().eq_ignore_ascii_case("y") {
+            match remove_server(&name) {
+                Ok(true) => println!("  {} Server '{}' wurde erfolgreich gelöscht!\n", "✓".bright_green(), name.bold()),
+                Ok(false) => println!("  {} Server nicht gefunden.\n", "i".bright_yellow()),
+                Err(e) => eprintln!("  {} Fehler beim Löschen: {}\n", "✗".bright_red(), e),
+            }
+        } else {
+            println!("  Löschen abgebrochen.\n");
+        }
+    } else {
+        eprintln!("  {} Server '{}' nicht im Tresor gefunden.\n", "✗".bright_red(), choice);
+    }
+}
+
+fn handle_interactive_edit() {
+    let vault = load_vault();
+    if vault.servers.is_empty() {
+        println!("  {} Keine Server zum Bearbeiten vorhanden.", "!".bright_yellow());
+        return;
+    }
+
+    println!("\n{}", "── SERVER BEARBEITEN ──".bright_cyan());
+    print!("  Welchen Server möchtest du bearbeiten? [1-{}, Name oder Enter zum Abbrechen]: ", vault.servers.len());
+    let _ = stdout().flush();
+
+    let mut input = String::new();
+    if stdin().read_line(&mut input).is_err() { return; }
+    let choice = input.trim();
+    if choice.is_empty() { return; }
+
+    let target = if let Ok(num) = choice.parse::<usize>() {
+        if num >= 1 && num <= vault.servers.len() {
+            vault.servers.get(num - 1).cloned()
+        } else {
+            eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
+            return;
+        }
+    } else {
+        vault.servers.iter().find(|s| s.name.eq_ignore_ascii_case(choice)).cloned()
+    };
+
+    if let Some(mut srv) = target {
+        let old_name = srv.name.clone();
+        println!("  (Drücke einfach [ENTER], um den bisherigen Wert beizubehalten)\n");
+
+        print!("  Name [{}]: ", srv.name.bold());
+        let _ = stdout().flush();
+        let mut buf = String::new();
+        let _ = stdin().read_line(&mut buf);
+        if !buf.trim().is_empty() { srv.name = buf.trim().to_string(); }
+
+        print!("  Host / IP [{}]: ", srv.host.bold());
+        let _ = stdout().flush();
+        buf.clear();
+        let _ = stdin().read_line(&mut buf);
+        if !buf.trim().is_empty() { srv.host = buf.trim().to_string(); }
+
+        print!("  Benutzer [{}]: ", srv.user.bold());
+        let _ = stdout().flush();
+        buf.clear();
+        let _ = stdin().read_line(&mut buf);
+        if !buf.trim().is_empty() { srv.user = buf.trim().to_string(); }
+
+        print!("  Port [{}]: ", srv.port);
+        let _ = stdout().flush();
+        buf.clear();
+        let _ = stdin().read_line(&mut buf);
+        if let Ok(p) = buf.trim().parse::<u16>() { srv.port = p; }
+
+        print!("  Tags [{}]: ", srv.tags.join(", ").bold());
+        let _ = stdout().flush();
+        buf.clear();
+        let _ = stdin().read_line(&mut buf);
+        if !buf.trim().is_empty() {
+            srv.tags = buf.trim().split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        }
+
+        match crate::vault::update_server(&old_name, srv) {
+            Ok(_) => println!("  {} Server erfolgreich aktualisiert!\n", "✓".bright_green()),
+            Err(e) => eprintln!("  {} Fehler: {}\n", "✗".bright_red(), e),
+        }
+    } else {
+        eprintln!("  {} Server '{}' nicht gefunden.\n", "✗".bright_red(), choice);
+    }
+}
+
 async fn handle_tui() {
     loop {
         match run_tui() {
@@ -289,6 +424,9 @@ async fn handle_tui() {
             }
             Ok(Some(TuiAction::TriggerLogin)) => {
                 let _ = run_oauth_flow("github").await;
+            }
+            Ok(Some(TuiAction::TriggerAdd)) => {
+                handle_interactive_add();
             }
             Ok(Some(TuiAction::Quit)) | Ok(None) => break,
             Err(e) => {

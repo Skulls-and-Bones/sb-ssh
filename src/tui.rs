@@ -20,6 +20,7 @@ use crate::runner::check_server_latency;
 pub enum TuiAction {
     Connect(ServerEntry),
     TriggerLogin,
+    TriggerAdd,
     Quit,
 }
 
@@ -29,6 +30,7 @@ pub struct TuiApp {
     pub selected_index: usize,
     pub table_state: TableState,
     pub latencies: Vec<Option<Duration>>,
+    pub confirm_delete: bool,
 }
 
 impl TuiApp {
@@ -50,7 +52,27 @@ impl TuiApp {
             selected_index: 0,
             table_state,
             latencies,
+            confirm_delete: false,
         }
+    }
+
+    pub fn reload(&mut self) {
+        self.vault = load_vault();
+        if self.selected_index >= self.vault.servers.len() && !self.vault.servers.is_empty() {
+            self.selected_index = self.vault.servers.len() - 1;
+        }
+        if self.vault.servers.is_empty() {
+            self.table_state.select(None);
+        } else {
+            self.table_state.select(Some(self.selected_index));
+        }
+        self.refresh_latencies();
+    }
+
+    pub fn refresh_latencies(&mut self) {
+        self.latencies = self.vault.servers.iter()
+            .map(|s| check_server_latency(&s.host, s.port))
+            .collect();
     }
 
     pub fn next(&mut self) {
@@ -78,6 +100,12 @@ pub fn run_tui() -> Result<Option<TuiAction>, String> {
     enable_raw_mode().map_err(|e| e.to_string())?;
     let mut stdout = stdout();
     execute!(stdout, EnterAlternateScreen).map_err(|e| e.to_string())?;
+
+    // Drain all pending events from console input buffer to avoid leftover Enter keys
+    while event::poll(Duration::from_millis(50)).unwrap_or(false) {
+        let _ = event::read();
+    }
+
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).map_err(|e| e.to_string())?;
 
@@ -98,13 +126,42 @@ fn run_loop(
     loop {
         terminal.draw(|f| ui(f, app)).map_err(|e| e.to_string())?;
 
-        if event::poll(Duration::from_millis(250)).map_err(|e| e.to_string())? {
+        if event::poll(Duration::from_millis(200)).map_err(|e| e.to_string())? {
             if let Event::Key(key) = event::read().map_err(|e| e.to_string())? {
+                if key.kind != event::KeyEventKind::Press {
+                    continue;
+                }
+
+                if app.confirm_delete {
+                    match key.code {
+                        KeyCode::Char('j') | KeyCode::Char('y') | KeyCode::Enter => {
+                            if let Some(srv) = app.selected_server() {
+                                let name = srv.name.clone();
+                                let _ = crate::vault::remove_server(&name);
+                                app.reload();
+                            }
+                            app.confirm_delete = false;
+                        }
+                        KeyCode::Char('n') | KeyCode::Esc | KeyCode::Char('q') => {
+                            app.confirm_delete = false;
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
+
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(Some(TuiAction::Quit)),
                     KeyCode::Down | KeyCode::Char('j') => app.next(),
                     KeyCode::Up | KeyCode::Char('k') => app.previous(),
                     KeyCode::Char('l') => return Ok(Some(TuiAction::TriggerLogin)),
+                    KeyCode::Char('r') => app.refresh_latencies(),
+                    KeyCode::Char('d') | KeyCode::Char('x') | KeyCode::Delete => {
+                        if !app.vault.servers.is_empty() {
+                            app.confirm_delete = true;
+                        }
+                    }
+                    KeyCode::Char('a') | KeyCode::Char('+') => return Ok(Some(TuiAction::TriggerAdd)),
                     KeyCode::Enter => {
                         if let Some(server) = app.selected_server() {
                             return Ok(Some(TuiAction::Connect(server.clone())));
@@ -230,17 +287,36 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
     f.render_stateful_widget(table, chunks[2], &mut app.table_state);
 
     // 4. Hotkey Footer
-    let footer_spans = vec![
-        Span::styled(" [ENTER] ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::styled(" Verbinden   ", Style::default().fg(Color::White)),
-        Span::styled(" [L] ", Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
-        Span::styled(" OAuth Login   ", Style::default().fg(Color::White)),
-        Span::styled(" [↑/↓] ", Style::default().fg(Color::Black).bg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(" Navigation   ", Style::default().fg(Color::White)),
-        Span::styled(" [Q] ", Style::default().fg(Color::Black).bg(Color::Red).add_modifier(Modifier::BOLD)),
-        Span::styled(" Beenden", Style::default().fg(Color::White)),
-    ];
-    let footer = Paragraph::new(Line::from(footer_spans))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(30, 38, 56))));
-    f.render_widget(footer, chunks[3]);
+    let footer_widget = if app.confirm_delete {
+        let name = app.selected_server().map(|s| s.name.as_str()).unwrap_or("Server");
+        let spans = vec![
+            Span::styled(" ACHTUNG: ", Style::default().fg(Color::Black).bg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(format!(" Möchtest du '{}' wirklich löschen? ", name), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(" [J / Enter] Ja ", Style::default().fg(Color::Black).bg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled("   ", Style::default()),
+            Span::styled(" [N / Esc] Abbrechen ", Style::default().fg(Color::Black).bg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+        ];
+        Paragraph::new(Line::from(spans))
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Red)))
+    } else {
+        let footer_spans = vec![
+            Span::styled(" [ENTER] ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(" Verbinden   ", Style::default().fg(Color::White)),
+            Span::styled(" [D] ", Style::default().fg(Color::Black).bg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(" Löschen   ", Style::default().fg(Color::White)),
+            Span::styled(" [+] ", Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(" Hinzufügen   ", Style::default().fg(Color::White)),
+            Span::styled(" [R] ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(" Ping   ", Style::default().fg(Color::White)),
+            Span::styled(" [L] ", Style::default().fg(Color::Black).bg(Color::Blue).add_modifier(Modifier::BOLD)),
+            Span::styled(" Login   ", Style::default().fg(Color::White)),
+            Span::styled(" [↑/↓] ", Style::default().fg(Color::Black).bg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+            Span::styled(" Nav   ", Style::default().fg(Color::White)),
+            Span::styled(" [Q] ", Style::default().fg(Color::Black).bg(Color::Gray).add_modifier(Modifier::BOLD)),
+            Span::styled(" Beenden", Style::default().fg(Color::White)),
+        ];
+        Paragraph::new(Line::from(footer_spans))
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(30, 38, 56))))
+    };
+    f.render_widget(footer_widget, chunks[3]);
 }

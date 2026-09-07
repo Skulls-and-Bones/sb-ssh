@@ -19,6 +19,8 @@ pub struct ServerEntry {
 pub struct ServerVault {
     #[serde(default)]
     pub servers: Vec<ServerEntry>,
+    #[serde(default)]
+    pub ignored_hosts: Vec<String>,
 }
 
 fn vault_path() -> PathBuf {
@@ -88,6 +90,10 @@ pub fn sync_ssh_config_servers(vault: &mut ServerVault) -> bool {
                  idf: &Option<String>| -> bool {
         if let Some(name) = h {
             if name == "*" || name.contains('?') || name.contains(' ') {
+                return false;
+            }
+            // Ignoriere Server, die der Benutzer explizit gelöscht hat
+            if v.ignored_hosts.iter().any(|ih| ih.eq_ignore_ascii_case(name)) {
                 return false;
             }
             let host = hn.clone().unwrap_or_else(|| name.clone());
@@ -179,10 +185,24 @@ pub fn remove_server(name: &str) -> Result<bool, String> {
     let len_before = vault.servers.len();
     vault.servers.retain(|s| !s.name.eq_ignore_ascii_case(name));
     if vault.servers.len() < len_before {
+        if !vault.ignored_hosts.iter().any(|h| h.eq_ignore_ascii_case(name)) {
+            vault.ignored_hosts.push(name.to_string());
+        }
         save_vault(&vault).map_err(|e| e.to_string())?;
         Ok(true)
     } else {
         Ok(false)
+    }
+}
+
+pub fn update_server(old_name: &str, updated: ServerEntry) -> Result<(), String> {
+    let mut vault = load_vault();
+    if let Some(pos) = vault.servers.iter().position(|s| s.name.eq_ignore_ascii_case(old_name)) {
+        vault.servers[pos] = updated;
+        save_vault(&vault).map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err(format!("Server '{}' nicht gefunden!", old_name))
     }
 }
 
