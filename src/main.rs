@@ -12,6 +12,7 @@ mod exec;
 mod native_ssh;
 mod audit;
 mod recorder;
+mod socks5;
 
 use std::io::{stdin, stdout, Write};
 use clap::Parser;
@@ -28,9 +29,32 @@ use tui::{run_tui, TuiAction};
 async fn main() {
     let cli = Cli::parse();
 
-    // Direktverbindung wenn ein Ziel übergeben wurde (Drop-in ssh replacement)
+    // Direktverbindung oder Drop-in ssh Flags wenn ein Ziel übergeben wurde
     if let Some(target) = cli.target {
-        handle_connect(&target, None, None, cli.record).await;
+        // 1. Dynamischer SOCKS5-Proxy (-D [bind:]port)
+        if let Some(dyn_arg) = cli.dynamic_forward {
+            let port = dyn_arg.split(':').last().and_then(|p| p.parse::<u16>().ok()).unwrap_or(1080);
+            handle_proxy(&target, port).await;
+            return;
+        }
+
+        // 2. Lokales Port-Forwarding (-L local:remote)
+        if let Some(fwd_arg) = cli.local_forward {
+            if let Err(e) = tunnel::run_tunnel(&target, &fwd_arg).await {
+                eprintln!("  {} Tunnel-Fehler: {}", "✗".bright_red(), e);
+            }
+            return;
+        }
+
+        // 3. Non-interactive Streaming Command (z.B. git, rsync, batch commands)
+        if !cli.command_args.is_empty() {
+            let cmd_str = cli.command_args.join(" ");
+            handle_streaming_exec(&target, &cmd_str, cli.login_user, cli.port).await;
+            return;
+        }
+
+        // 4. Interaktive Shell-Verbindung
+        handle_connect(&target, cli.login_user, cli.port, cli.record).await;
         return;
     }
 
@@ -153,6 +177,90 @@ async fn main() {
         }
         Some(Commands::ServerInit) => {
             handle_server_init();
+        }
+        Some(Commands::Proxy { target, port }) => {
+            handle_proxy(&target, port).await;
+        }
+        Some(Commands::Completions { shell }) => {
+            handle_completions(shell);
+        }
+    }
+}
+
+fn handle_completions(shell: clap_complete::Shell) {
+    use clap::CommandFactory;
+    let mut cmd = Cli::command();
+    clap_complete::generate(shell, &mut cmd, "sb-ssh", &mut std::io::stdout());
+}
+
+async fn handle_proxy(target: &str, port: u16) {
+    let vault = load_vault();
+    let session = load_session();
+    let server = if let Some(s) = find_server(&vault, target) {
+        s.clone()
+    } else {
+        let (parsed_user, parsed_host) = if target.contains('@') {
+            let mut parts = target.split('@');
+            (parts.next().unwrap_or("leonf").to_string(), parts.next().unwrap_or("").to_string())
+        } else {
+            ("leonf".to_string(), target.to_string())
+        };
+        ServerEntry {
+            name: target.to_string(),
+            host: parsed_host,
+            port: 22,
+            user: parsed_user,
+            tags: vec!["ad-hoc".to_string()],
+            identity_file: None,
+            description: Some("Ad-hoc SOCKS5 Proxy".to_string()),
+            last_connected: None,
+            jump_host: None,
+        }
+    };
+
+    if let Err(e) = socks5::run_socks5_proxy(&server, port, session.as_ref()).await {
+        eprintln!("  {} SOCKS5 Fehler: {}", "✗".bright_red(), e);
+    }
+}
+
+async fn handle_streaming_exec(
+    target: &str,
+    command: &str,
+    user_override: Option<String>,
+    port_override: Option<u16>,
+) {
+    let vault = load_vault();
+    let session = load_session();
+    let server = if let Some(found) = find_server(&vault, target) {
+        let mut s = found.clone();
+        if let Some(u) = user_override { s.user = u; }
+        if let Some(p) = port_override { s.port = p; }
+        s
+    } else {
+        let (parsed_user, parsed_host) = if target.contains('@') {
+            let mut parts = target.split('@');
+            (parts.next().unwrap_or("leonf").to_string(), parts.next().unwrap_or("").to_string())
+        } else {
+            (user_override.unwrap_or_else(|| "leonf".to_string()), target.to_string())
+        };
+        ServerEntry {
+            name: target.to_string(),
+            host: parsed_host,
+            port: port_override.unwrap_or(22),
+            user: parsed_user,
+            tags: vec!["ad-hoc".to_string()],
+            identity_file: None,
+            description: Some("Ad-hoc Exec".to_string()),
+            last_connected: None,
+            jump_host: None,
+        }
+    };
+
+    match native_ssh::run_streaming_command(&server, command, session.as_ref()).await {
+        Ok(code) => std::process::exit(code),
+        Err(e) => {
+            eprintln!("  {} Remote-Ausführungsfehler: {}", "✗".bright_red(), e);
+            std::process::exit(1);
         }
     }
 }

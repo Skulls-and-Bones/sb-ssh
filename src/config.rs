@@ -57,6 +57,11 @@ pub fn get_sb_dir() -> PathBuf {
     let sb_dir = home.join(".sb-ssh");
     if !sb_dir.exists() {
         let _ = std::fs::create_dir_all(&sb_dir);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&sb_dir, std::fs::Permissions::from_mode(0o700));
+        }
     }
     sb_dir
 }

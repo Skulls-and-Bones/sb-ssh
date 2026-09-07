@@ -378,6 +378,52 @@ pub async fn run_remote_command(
     Ok((exit_code, stdout_str, stderr_str))
 }
 
+/// Führt ein Remote-Kommando aus und streamt Ein- und Ausgaben direkt (ideal für git, rsync, scp, non-interactive CI).
+pub async fn run_streaming_command(
+    server: &ServerEntry,
+    command: &str,
+    session: Option<&UserSession>,
+) -> Result<i32, String> {
+    use tokio::io::AsyncWriteExt;
+
+    let handle = connect_and_auth(server, session).await?;
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| format!("Fehler beim Öffnen des Kanals: {}", e))?;
+
+    channel
+        .exec(true, command)
+        .await
+        .map_err(|e| format!("Fehler beim Ausführen von '{}': {}", command, e))?;
+
+    let mut exit_code = 0;
+    let mut stdout_writer = tokio::io::stdout();
+    let mut stderr_writer = tokio::io::stderr();
+
+    while let Some(msg) = channel.wait().await {
+        match msg {
+            russh::ChannelMsg::Data { data } => {
+                let _ = stdout_writer.write_all(&data).await;
+                let _ = stdout_writer.flush().await;
+            }
+            russh::ChannelMsg::ExtendedData { data, .. } => {
+                let _ = stderr_writer.write_all(&data).await;
+                let _ = stderr_writer.flush().await;
+            }
+            russh::ChannelMsg::ExitStatus { exit_status } => {
+                exit_code = exit_status as i32;
+            }
+            russh::ChannelMsg::Close => {
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(exit_code)
+}
+
 /// Öffnet einen nativen SSH2 Direct-TCPIP Port-Forwarding Tunnel.
 pub async fn run_tunnel(
     server: &ServerEntry,

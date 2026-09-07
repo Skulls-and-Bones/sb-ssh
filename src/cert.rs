@@ -45,6 +45,11 @@ pub fn get_or_create_ca_key() -> Result<PrivateKey, String> {
 
     std::fs::write(&key_path, priv_openssh.as_bytes())
         .map_err(|e| format!("Konnte CA-Key nicht speichern: {}", e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+    }
     std::fs::write(&pub_path, pub_openssh.as_bytes())
         .map_err(|e| format!("Konnte CA-Public-Key nicht speichern: {}", e))?;
 

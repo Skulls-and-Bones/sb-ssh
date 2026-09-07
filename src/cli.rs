@@ -12,9 +12,61 @@ pub struct Cli {
     /// Optionales Direkt-Ziel (z.B. 'hostinger-prod' oder 'user@host') für Drop-in SSH-Kompatibilität
     pub target: Option<String>,
 
+    /// Auszuführende Remote-Befehle (z.B. bei non-interactive Aufrufen wie git oder rsync)
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub command_args: Vec<String>,
+
     /// Session im Asciinema v2 (.cast) Format aufzeichnen
     #[arg(short, long)]
     pub record: bool,
+
+    /// SSH Port (-p 22)
+    #[arg(short = 'p')]
+    pub port: Option<u16>,
+
+    /// SSH Login-Benutzer (-l user)
+    #[arg(short = 'l')]
+    pub login_user: Option<String>,
+
+    /// Identity-Datei / Private Key (-i id_ed25519)
+    #[arg(short = 'i')]
+    pub identity_file: Option<String>,
+
+    /// OpenSSH Optionen (-o Option=Value)
+    #[arg(short = 'o', action = clap::ArgAction::Append)]
+    pub options: Vec<String>,
+
+    /// Dynamisches SOCKS5 Port-Forwarding (-D [bind:]port)
+    #[arg(short = 'D')]
+    pub dynamic_forward: Option<String>,
+
+    /// Lokales Port-Forwarding (-L local:remote)
+    #[arg(short = 'L')]
+    pub local_forward: Option<String>,
+
+    /// Disable PTY allocation (-T)
+    #[arg(short = 'T')]
+    pub disable_pty: bool,
+
+    /// Force PTY allocation (-t)
+    #[arg(short = 't')]
+    pub force_pty: bool,
+
+    /// Do not execute remote command / forward only (-N)
+    #[arg(short = 'N')]
+    pub no_exec: bool,
+
+    /// Quiet mode (-q)
+    #[arg(short = 'q')]
+    pub quiet: bool,
+
+    /// Verbose mode (-v)
+    #[arg(short = 'v', action = clap::ArgAction::Count)]
+    pub verbose: u8,
+
+    /// Compression (-C)
+    #[arg(short = 'C')]
+    pub compression: bool,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -166,4 +218,20 @@ pub enum Commands {
 
     /// Gibt die 1-Klick Anleitung & Konfiguration aus, um Ziel-Server für S&B CA zu rüsten
     ServerInit,
+
+    /// Startet einen dynamischen SOCKS5-Proxy über den Zielserver (RFC 1928)
+    Proxy {
+        /// Servername aus dem Tresor oder Zieladresse
+        target: String,
+        /// Lokaler SOCKS5 Listening-Port (Standard: 1080)
+        #[arg(short, long, default_value_t = 1080)]
+        port: u16,
+    },
+
+    /// Generiert Shell-Autovervollständigungsskripte (bash, zsh, fish, powershell, elvish)
+    Completions {
+        /// Ziel-Shell für die Autovervollständigung
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }

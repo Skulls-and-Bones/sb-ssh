@@ -147,6 +147,34 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 
 ---
 
+### Phase 9: Shell-Completions & Drop-in Tool-Kompatibilität (Status: 🟢 Erledigt)
+- [x] **Shell-Autovervollständigung (`sb-ssh completions <shell>`):**
+  - Vollständige Autocompletions für PowerShell, Bash, Zsh, Fish und Elvish via `clap_complete`.
+  - Direkte Einbindung in Shell-Profile für instantane Subcommand- und Parameter-Vervollständigung per `[TAB]`.
+- [x] **Tolerante OpenSSH-Flag-Kompatibilität (`GIT_SSH_COMMAND`, Rsync, Ansible):**
+  - Tolerierung und intelligentes Parsing klassischer OpenSSH-Flags (`-p <port>`, `-l <user>`, `-i <key>`, `-o <opt>`, `-T`, `-t`, `-N`, `-q`, `-v`, `-C`, `-W`).
+  - Drop-in Einsatz als `GIT_SSH_COMMAND="sb-ssh"` oder `rsync -e sb-ssh` ohne Absturz durch unbekannte Argumente.
+  - Streaming-Kommandoausführung (`run_streaming_command`) ohne PTY-Overhead bei Batch- und Skriptaufrufen.
+
+---
+
+### Phase 10: Dynamischer SOCKS5-Proxy (`sb-ssh tunnel -D`) (Status: 🟢 Erledigt)
+- [x] **100% Pure-Rust SOCKS5 Gateway (RFC 1928):**
+  - Lokaler SOCKS5-Listener (z. B. via `sb-ssh proxy <server> [port]` oder `sb-ssh <server> -D 1080`).
+  - Wandelt eingehende SOCKS5-`CONNECT`-Anfragen on-the-fly in native `channel_open_direct_tcpip`-Tunnel zum Zielhost um.
+  - Vollständige Unterstützung für IPv4, IPv6 und Remote-Domainauflösung (DNS-Leak-Protection).
+  - Ermöglicht das Ansteuern interner Web-UIs, Datenbanken und Subnetze direkt über Browser-Proxy-Einstellungen oder `curl --socks5-hostname`.
+
+---
+
+### Phase 11: Security-Hardening & Hardware-Tokens (Status: 🟡 In Arbeit)
+- [x] **Lokale Secret-Härtung:**
+  - Strikte Zugriffsrechte (Unix `0700` für `~/.sb-ssh` und `0600` für `ca_key`).
+- [ ] **FIDO2 / YubiKey Touch-to-Sign:**
+  - Optionale Hardware-Token-Bindung zur Autorisierung ephemerer Zertifikatsausstellungen.
+
+---
+
 ## 🛠️ CLI Befehls-Referenz (Aktueller Stand)
 
 | Befehl | Kurzbeschreibung |
@@ -172,3 +200,5 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 | `sb-ssh remove <name>` | Entfernt einen Server dauerhaft aus dem Tresor |
 | `sb-ssh cert -H <hours>` | Manuelle Erstellung eines signierten OpenSSH-Zertifikats |
 | `sb-ssh server-init` | Gibt die 1-Zeilen-Kommandos zur CA-Einrichtung auf Zielservern aus |
+| `sb-ssh proxy <name> [port]` | Startet einen dynamischen SOCKS5-Proxy (Standard: Port 1080) |
+| `sb-ssh completions <shell>` | Generiert Shell-Completions (bash, zsh, fish, powershell) |
