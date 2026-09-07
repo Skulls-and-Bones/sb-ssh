@@ -1,9 +1,8 @@
 use std::path::PathBuf;
-use ssh_key::{
+use russh::keys::ssh_key::{
     certificate::{Builder, CertType},
-    Algorithm, PrivateKey,
+    Algorithm, LineEnding, PrivateKey,
 };
-use ssh_key::rand_core::OsRng;
 use crate::config::get_sb_dir;
 
 #[allow(dead_code)]
@@ -35,10 +34,11 @@ pub fn get_or_create_ca_key() -> Result<PrivateKey, String> {
     }
 
     // Neu generieren
-    let ca_key = PrivateKey::random(&mut OsRng, Algorithm::Ed25519)
+    let mut rng = rand::rng();
+    let ca_key = PrivateKey::random(&mut rng, Algorithm::Ed25519)
         .map_err(|e| format!("Fehler beim Generieren des CA-Keys: {}", e))?;
 
-    let priv_openssh = ca_key.to_openssh(ssh_key::LineEnding::LF)
+    let priv_openssh = ca_key.to_openssh(LineEnding::LF)
         .map_err(|e| format!("Fehler beim Serialisieren des CA-Keys: {}", e))?;
     let pub_openssh = ca_key.public_key().to_openssh()
         .map_err(|e| format!("Fehler beim Serialisieren des CA-Public-Keys: {}", e))?;
@@ -70,7 +70,8 @@ pub fn generate_ephemeral_certificate(
     let ca_key = get_or_create_ca_key()?;
 
     // 1. Temporärer ephemerer User-Key
-    let user_priv = PrivateKey::random(&mut OsRng, Algorithm::Ed25519)
+    let mut rng = rand::rng();
+    let user_priv = PrivateKey::random(&mut rng, Algorithm::Ed25519)
         .map_err(|e| format!("Konnte ephemeren Key nicht erzeugen: {}", e))?;
     let user_pub = user_priv.public_key().clone();
 
@@ -83,7 +84,7 @@ pub fn generate_ephemeral_certificate(
     let key_id = format!("sb-ssh-session-{}-{}", username, unix_now);
 
     // 3. OpenSSH User-Zertifikat bauen
-    let mut builder = Builder::new_with_random_nonce(&mut OsRng, &user_pub, unix_now, unix_valid_until)
+    let mut builder = Builder::new_with_random_nonce(&mut rng, &user_pub, unix_now, unix_valid_until)
         .map_err(|e| format!("Zertifikats-Builder Fehler: {}", e))?;
 
     builder.cert_type(CertType::User)
@@ -114,7 +115,7 @@ pub fn generate_ephemeral_certificate(
     let priv_path = sb_dir.join("id_ephemeral");
     let cert_path = sb_dir.join("id_ephemeral-cert.pub");
 
-    let priv_str = user_priv.to_openssh(ssh_key::LineEnding::LF)
+    let priv_str = user_priv.to_openssh(LineEnding::LF)
         .map_err(|e| format!("Konnte privaten Key nicht formatieren: {}", e))?;
     let cert_str = certificate.to_openssh()
         .map_err(|e| format!("Konnte Zertifikat nicht formatieren: {}", e))?;

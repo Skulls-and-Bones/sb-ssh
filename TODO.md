@@ -60,21 +60,20 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 
 ---
 
-### Phase 3: 1-Click SSH Port-Forwarding & Tunnels (Status: � Erledigt)
+#### Phase 3: 1-Click SSH Port-Forwarding & Tunnels (Status: 🟢 Erledigt)
 - [x] **CLI Tunnel-Kommando:**
   - Syntax: `sb-ssh tunnel <server> <local_port>:<remote_port>`
   - Beispiel: `sb-ssh tunnel hostinger-prod 8080:80` (leitet entfernten Webserver verschlüsselt auf localhost:8080)
   - Beispiel: `sb-ssh tunnel hostinger-prod 5432:5432` (PostgreSQL direkt ansprechen)
 - [x] **Live Tunnel-Status:**
   - Übersichtliche Terminal-Statusanzeige mit lokalem Endpunkt, Remote-Ziel, Ephemeral-Zertifikat und Beenden via `[STRG + C]`.
-  - Auto-ServerAlive KeepAlives und ExitOnForwardFailure.
 - [x] **Interaktives Menü & TUI Integration:**
   - Konsolenmenü-Option `[u] SSH-Tunnel` zur geführten Port-Weiterleitung.
   - TUI-Hotkey `[U]` zur 1-Klick-Tunnel-Initiierung für den ausgewählten Server.
 
 ---
 
-### Phase 4: Live Remote Server-Stats & Quick-Health-Probe (Status: � Erledigt)
+### Phase 4: Live Remote Server-Stats & Quick-Health-Probe (Status: 🟢 Erledigt)
 - [x] **Ad-hoc Remote Telemetrie (`sb-ssh info <server>`):**
   - Blitzschnelle Abfrage über non-interactive SSH in unter 1 Sekunde (Batch-Abfrage von CPU, RAM, Disk, Uptime).
 - [x] **Metriken & Visualisierung:**
@@ -88,15 +87,16 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 
 ---
 
-### Phase 5: Schneller Datei-Transfer (SCP / SFTP) (Status: 🟢 Erledigt)
+### Phase 5: Schneller Datei-Transfer (Pure-Rust SFTP) (Status: 🟢 Erledigt)
 - [x] **S&B Push / Pull:**
   - `sb-ssh push <server> <lokaler_pfad> [remote_pfad]`
   - `sb-ssh pull <server> <remote_pfad> [lokaler_pfad]`
   - Vollständige Nutzung der Vault-Namen und des ephemeren 8h-Zertifikats ohne Passwort-Prompt.
+  - 100% nativer SFTP-Client (`russh-sftp`) ohne externen `scp.exe`-Subprozess.
 - [x] **Transfer-Statistiken:**
   - Anzeige von Dateigröße, Übertragungsdauer und Geschwindigkeit in MB/s.
 - [x] **Interaktives Menü:**
-  - Menüoption `[p] Dateitransfer (SCP)` für geführten Upload/Download.
+  - Menüoption `[p] Dateitransfer` für geführten Upload/Download.
 
 ---
 
@@ -105,11 +105,22 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
   - `sb-ssh exec "docker ps -a" --tag prod`
   - `sb-ssh exec "uptime" --target all`
 - [x] **Parallele Worker:**
-  - Parallele Ausführung über asynchrone Tokio-Tasks mit non-blocking SSH.
+  - Parallele Ausführung über asynchrone Tokio-Tasks mit nativer SSH2-Kanalsteuerung.
 - [x] **Aggregierte Ausgabe:**
   - Saubere tabellarische Zusammenfassung mit Servername, Host, Exit-Code-Badge, Latenz und Konsolenausgaben.
 - [x] **Interaktives Menü:**
   - Menüoption `[x] Broadcast (Exec)` im Konsolen-Auswahlmenü.
+
+---
+
+### Phase 6.5: Vollständige Autarkie — Pure-Rust SSH2-Transport (Status: 🟢 Erledigt)
+- [x] **100% Standalone Single-Binary (Beseitigung aller externen Abhängigkeiten):**
+  - Vollständige Eliminierung von Abhängigkeiten zu Windows OpenSSH (`ssh.exe`, `scp.exe`).
+  - Direkter SSH2-Transport über puren Rust-Stack (`russh` v0.63.2 + `ring` + `russh-sftp`).
+  - Direkte Zertifikatsauthentifizierung (`authenticate_openssh_cert`) mit In-Memory-Verarbeitung ephemerer Ed25519-OpenSSH-Zertifikate.
+  - Interaktives Terminal mit nativer PTY-Allokation (`xterm-256color`), Crossterm Raw-Mode und dynamischem Resizing.
+  - Natives Port-Forwarding via `channel_open_direct_tcpip`.
+  - Native Remote-Kommandoausführung (`channel_open_session` -> `exec`) für Probes und Broadcasts.
 
 ---
 
@@ -145,8 +156,13 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 | Befehl | Kurzbeschreibung |
 | :--- | :--- |
 | `sb-ssh` | Öffnet das interaktive Konsolen-Auswahl- & Management-Menü |
-| `sb-ssh tui` | Startet das grafische Vollbild-Terminal-Dashboard |
-| `sb-ssh connect <name>` | Verbindet sofort zum Ziel (prüft Token, generiert 8h-Cert, ruft SSH) |
+| `sb-ssh tui` | Startet das grafische Vollbild-Terminal-Dashboard (Ratatui) |
+| `sb-ssh connect <name>` | Verbindet nativ im Terminal (100% Pure-Rust PTY, 8h-Cert) |
+| `sb-ssh tunnel <name> <spec>` | Öffnet einen nativen TCP-Tunnel (`local:remote` z. B. `8080:80`) |
+| `sb-ssh info <name>` | Blitzschnelle Health-Probe (CPU, RAM, Disk, Uptime, Latenz) |
+| `sb-ssh push <name> <local> [rem]` | Lädt Dateien nativ via SFTP auf den Server |
+| `sb-ssh pull <name> <rem> [local]` | Lädt Dateien nativ via SFTP vom Server herunter |
+| `sb-ssh exec "<cmd>" [-t target]` | Führt Befehle parallel auf Zielservern aus (Broadcast) |
 | `sb-ssh list` | Gibt die formatierten Server inkl. Live-Latenz-Ping aus |
 | `sb-ssh status` | Zeigt OAuth-Status, Restlaufzeit und CA-Zertifikat |
 | `sb-ssh login` | Startet den OAuth2 PKCE Browser-Login |

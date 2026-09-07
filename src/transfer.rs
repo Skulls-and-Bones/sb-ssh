@@ -1,15 +1,20 @@
-﻿use std::path::Path;
-use std::process::Command;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use colored::*;
+use tokio::io::AsyncWriteExt;
+use russh_sftp::client::SftpSession;
+
 use crate::config::load_session;
 use crate::vault::{find_server, load_vault, ServerEntry};
-use crate::cert::generate_ephemeral_certificate;
+use crate::native_ssh::connect_and_auth;
 
-pub fn push_file(target_query: &str, local_path_str: &str, remote_path_opt: Option<&str>) -> Result<(), String> {
+pub async fn push_file(target_query: &str, local_path_str: &str, remote_path_opt: Option<&str>) -> Result<(), String> {
     let local_path = Path::new(local_path_str);
     if !local_path.exists() {
         return Err(format!("Lokale Datei '{}' existiert nicht!", local_path_str));
+    }
+    if local_path.is_dir() {
+        return Err("Verzeichnis-Upload wird über SFTP derzeit nicht unterstützt. Bitte als Archiv (.tar.gz / .zip) übertragen.".to_string());
     }
 
     let file_size_bytes = std::fs::metadata(local_path)
@@ -45,60 +50,83 @@ pub fn push_file(target_query: &str, local_path_str: &str, remote_path_opt: Opti
         .and_then(|n| n.to_str())
         .unwrap_or("upload.bin");
     let remote_dest = remote_path_opt
-        .map(|s| s.to_string())
+        .map(|s| {
+            if s.ends_with('/') {
+                format!("{}{}", s, filename)
+            } else {
+                s.to_string()
+            }
+        })
         .unwrap_or_else(|| format!("./{}", filename));
 
-    let username = session.as_ref().map(|s| s.username.as_str()).unwrap_or("leonf");
-    let principals = [server.user.as_str(), "root", "leonf", "admin"];
-    let cert_bundle = generate_ephemeral_certificate(username, &principals, 8)?;
-
     println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
-    println!("  {} {} {}", "S&B NETGATE".bright_blue().bold(), "//".bright_black(), "DATEI-UPLOAD (PUSH)".bold());
+    println!("  {} {} {}", "S&B NETGATE".bright_blue().bold(), "//".bright_black(), "NATIVER SFTP-UPLOAD (PUSH)".bold());
     println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
     println!("  {} Quelle:     {} ({})", "►".bright_cyan(), local_path.display().to_string().bold(), size_str.bright_yellow());
     println!("  {} Zielserver: {} ({}@{}:{})", "►".bright_cyan(), server.name.bold(), server.user, server.host, server.port);
     println!("  {} Zielpfad:   {}", "►".bright_cyan(), remote_dest.bright_white().bold());
-    println!("  {} Übertrage Daten via kurzem Ephemeral-Zertifikat...", "►".bright_cyan());
-
-    let cert_arg = format!("CertificateFile={}", cert_bundle.cert_path.display());
-    let remote_full = format!("{}@{}:{}", server.user, server.host, remote_dest);
+    println!("  {} Transport:  {}", "►".bright_cyan(), "Autarker Pure-Rust SFTP Client (russh-sftp)".bright_magenta());
 
     let start = Instant::now();
-    let mut cmd = Command::new("scp");
-    cmd.arg("-P").arg(server.port.to_string())
-       .arg("-o").arg(cert_arg)
-       .arg("-i").arg(&cert_bundle.private_key_path)
-       .arg("-o").arg("StrictHostKeyChecking=accept-new");
 
-    if local_path.is_dir() {
-        cmd.arg("-r");
-    }
+    // 1. Verbinden & Authentifizieren
+    let handle = connect_and_auth(&server, session.as_ref()).await?;
 
-    if let Some(ref id_file) = server.identity_file {
-        cmd.arg("-i").arg(id_file);
-    }
+    // 2. SSH-Kanal öffnen & SFTP-Subsystem anfordern
+    let channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| format!("Fehler beim Öffnen des SSH-Kanals: {}", e))?;
 
-    cmd.arg(local_path_str).arg(&remote_full);
+    channel
+        .request_subsystem(true, "sftp")
+        .await
+        .map_err(|e| format!("SFTP-Subsystem fehlgeschlagen: {}", e))?;
 
-    let status = cmd.status().map_err(|e| format!("Konnte scp-Befehl nicht ausführen: {}", e))?;
+    let sftp = SftpSession::new(channel.into_stream())
+        .await
+        .map_err(|e| format!("SFTP-Sitzungsinitialisierung fehlgeschlagen: {}", e))?;
+
+    // 3. Lokale Datei öffnen & entfernte Datei erzeugen
+    let mut local_file = tokio::fs::File::open(local_path)
+        .await
+        .map_err(|e| format!("Konnte lokale Datei nicht lesen: {}", e))?;
+
+    let mut remote_file = sftp
+        .create(&remote_dest)
+        .await
+        .map_err(|e| format!("Konnte Zieldatei '{}' auf dem Server nicht erstellen: {}", remote_dest, e))?;
+
+    // 4. Daten streamen
+    let copied_bytes = tokio::io::copy(&mut local_file, &mut remote_file)
+        .await
+        .map_err(|e| format!("Übertragungsfehler: {}", e))?;
+
+    remote_file
+        .flush()
+        .await
+        .map_err(|e| format!("Fehler beim Abschließen der Remote-Datei: {}", e))?;
+
     let duration = start.elapsed();
-
-    if status.success() {
-        let speed_mb_s = if duration.as_secs_f64() > 0.0 {
-            (file_size_bytes as f64 / (1024.0 * 1024.0)) / duration.as_secs_f64()
-        } else {
-            0.0
-        };
-        println!("\n  {} Upload erfolgreich abgeschlossen!", "✓".bright_green().bold());
-        println!("  {} Dauer: {:.2}s  |  Geschwindigkeit: {:.2} MB/s", "►".bright_cyan(), duration.as_secs_f64(), speed_mb_s);
-        println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
-        Ok(())
+    let speed_mb_s = if duration.as_secs_f64() > 0.0 {
+        (copied_bytes as f64 / (1024.0 * 1024.0)) / duration.as_secs_f64()
     } else {
-        Err(format!("Upload fehlgeschlagen (Exit-Code: {:?})", status.code()))
-    }
+        0.0
+    };
+
+    println!("\n  {} Nativer Upload erfolgreich abgeschlossen!", "✓".bright_green().bold());
+    println!(
+        "  {} Übertragen: {}  |  Dauer: {:.2}s  |  Rate: {:.2} MB/s",
+        "►".bright_cyan(),
+        format_bytes(copied_bytes).bright_yellow(),
+        duration.as_secs_f64(),
+        speed_mb_s
+    );
+    println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+    Ok(())
 }
 
-pub fn pull_file(target_query: &str, remote_path_str: &str, local_path_opt: Option<&str>) -> Result<(), String> {
+pub async fn pull_file(target_query: &str, remote_path_str: &str, local_path_opt: Option<&str>) -> Result<(), String> {
     let vault = load_vault();
     let session = load_session();
 
@@ -123,46 +151,90 @@ pub fn pull_file(target_query: &str, remote_path_str: &str, local_path_opt: Opti
         }
     };
 
-    let local_dest = local_path_opt.unwrap_or(".");
-    let username = session.as_ref().map(|s| s.username.as_str()).unwrap_or("leonf");
-    let principals = [server.user.as_str(), "root", "leonf", "admin"];
-    let cert_bundle = generate_ephemeral_certificate(username, &principals, 8)?;
+    // Lokalen Zielpfad auflösen
+    let remote_path = Path::new(remote_path_str);
+    let remote_filename = remote_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("downloaded.bin");
+
+    let dest_path: PathBuf = match local_path_opt {
+        Some(path_str) => {
+            let p = Path::new(path_str);
+            if p.is_dir() {
+                p.join(remote_filename)
+            } else {
+                p.to_path_buf()
+            }
+        }
+        None => PathBuf::from(remote_filename),
+    };
 
     println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
-    println!("  {} {} {}", "S&B NETGATE".bright_blue().bold(), "//".bright_black(), "DATEI-DOWNLOAD (PULL)".bold());
+    println!("  {} {} {}", "S&B NETGATE".bright_blue().bold(), "//".bright_black(), "NATIVER SFTP-DOWNLOAD (PULL)".bold());
     println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
     println!("  {} Quellserver: {} ({}@{}:{})", "►".bright_cyan(), server.name.bold(), server.user, server.host, server.port);
     println!("  {} Remote-Pfad: {}", "►".bright_cyan(), remote_path_str.bright_yellow());
-    println!("  {} Lokales Ziel: {}", "►".bright_cyan(), local_dest.bright_white().bold());
-    println!("  {} Lade Datei herunter via kurzem Ephemeral-Zertifikat...", "►".bright_cyan());
-
-    let cert_arg = format!("CertificateFile={}", cert_bundle.cert_path.display());
-    let remote_full = format!("{}@{}:{}", server.user, server.host, remote_path_str);
+    println!("  {} Lokales Ziel: {}", "►".bright_cyan(), dest_path.display().to_string().bright_white().bold());
+    println!("  {} Transport:   {}", "►".bright_cyan(), "Autarker Pure-Rust SFTP Client (russh-sftp)".bright_magenta());
 
     let start = Instant::now();
-    let mut cmd = Command::new("scp");
-    cmd.arg("-P").arg(server.port.to_string())
-       .arg("-o").arg(cert_arg)
-       .arg("-i").arg(&cert_bundle.private_key_path)
-       .arg("-o").arg("StrictHostKeyChecking=accept-new");
 
-    if let Some(ref id_file) = server.identity_file {
-        cmd.arg("-i").arg(id_file);
-    }
+    // 1. Verbinden & Authentifizieren
+    let handle = connect_and_auth(&server, session.as_ref()).await?;
 
-    cmd.arg(&remote_full).arg(local_dest);
+    // 2. SSH-Kanal öffnen & SFTP-Subsystem anfordern
+    let channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| format!("Fehler beim Öffnen des SSH-Kanals: {}", e))?;
 
-    let status = cmd.status().map_err(|e| format!("Konnte scp-Befehl nicht ausführen: {}", e))?;
+    channel
+        .request_subsystem(true, "sftp")
+        .await
+        .map_err(|e| format!("SFTP-Subsystem fehlgeschlagen: {}", e))?;
+
+    let sftp = SftpSession::new(channel.into_stream())
+        .await
+        .map_err(|e| format!("SFTP-Sitzungsinitialisierung fehlgeschlagen: {}", e))?;
+
+    // 3. Remote-Datei öffnen
+    let mut remote_file = sftp
+        .open(remote_path_str)
+        .await
+        .map_err(|e| format!("Konnte entfernte Datei '{}' nicht öffnen: {}", remote_path_str, e))?;
+
+    // 4. Lokale Zieldatei erzeugen & streamen
+    let mut local_file = tokio::fs::File::create(&dest_path)
+        .await
+        .map_err(|e| format!("Konnte lokale Datei '{}' nicht erstellen: {}", dest_path.display(), e))?;
+
+    let copied_bytes = tokio::io::copy(&mut remote_file, &mut local_file)
+        .await
+        .map_err(|e| format!("Download-Übertragungsfehler: {}", e))?;
+
+    local_file
+        .flush()
+        .await
+        .map_err(|e| format!("Fehler beim Schreiben der lokalen Datei: {}", e))?;
+
     let duration = start.elapsed();
-
-    if status.success() {
-        println!("\n  {} Download erfolgreich abgeschlossen!", "✓".bright_green().bold());
-        println!("  {} Dauer: {:.2}s", "►".bright_cyan(), duration.as_secs_f64());
-        println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
-        Ok(())
+    let speed_mb_s = if duration.as_secs_f64() > 0.0 {
+        (copied_bytes as f64 / (1024.0 * 1024.0)) / duration.as_secs_f64()
     } else {
-        Err(format!("Download fehlgeschlagen (Exit-Code: {:?})", status.code()))
-    }
+        0.0
+    };
+
+    println!("\n  {} Nativer Download erfolgreich abgeschlossen!", "✓".bright_green().bold());
+    println!(
+        "  {} Empfangen:   {}  |  Dauer: {:.2}s  |  Rate: {:.2} MB/s",
+        "►".bright_cyan(),
+        format_bytes(copied_bytes).bright_yellow(),
+        duration.as_secs_f64(),
+        speed_mb_s
+    );
+    println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+    Ok(())
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -176,3 +248,4 @@ fn format_bytes(bytes: u64) -> String {
         format!("{} Bytes", bytes)
     }
 }
+

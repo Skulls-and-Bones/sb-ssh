@@ -9,6 +9,7 @@ mod tunnel;
 mod probe;
 mod transfer;
 mod exec;
+mod native_ssh;
 
 use std::io::{stdin, stdout, Write};
 use clap::Parser;
@@ -107,20 +108,20 @@ async fn main() {
             }
         }
         Some(Commands::Tunnel { target, forward }) => {
-            if let Err(e) = tunnel::run_tunnel(&target, &forward) {
+            if let Err(e) = tunnel::run_tunnel(&target, &forward).await {
                 eprintln!("  {} Tunnel-Fehler: {}", "✗".bright_red(), e);
             }
         }
         Some(Commands::Info { target }) => {
-            probe::print_server_health(&target);
+            probe::print_server_health(&target).await;
         }
         Some(Commands::Push { target, local_path, remote_path }) => {
-            if let Err(e) = transfer::push_file(&target, &local_path, remote_path.as_deref()) {
+            if let Err(e) = transfer::push_file(&target, &local_path, remote_path.as_deref()).await {
                 eprintln!("  {} Upload-Fehler: {}", "✗".bright_red(), e);
             }
         }
         Some(Commands::Pull { target, remote_path, local_path }) => {
-            if let Err(e) = transfer::pull_file(&target, &remote_path, local_path.as_deref()) {
+            if let Err(e) = transfer::pull_file(&target, &remote_path, local_path.as_deref()).await {
                 eprintln!("  {} Download-Fehler: {}", "✗".bright_red(), e);
             }
         }
@@ -215,17 +216,17 @@ async fn handle_interactive_selector() {
         }
 
         if choice.eq_ignore_ascii_case("u") || choice.eq_ignore_ascii_case("tunnel") {
-            handle_interactive_tunnel();
+            handle_interactive_tunnel().await;
             continue;
         }
 
         if choice.eq_ignore_ascii_case("i") || choice.eq_ignore_ascii_case("info") {
-            handle_interactive_info();
+            handle_interactive_info().await;
             continue;
         }
 
         if choice.eq_ignore_ascii_case("p") || choice.eq_ignore_ascii_case("transfer") || choice.eq_ignore_ascii_case("scp") {
-            handle_interactive_transfer();
+            handle_interactive_transfer().await;
             continue;
         }
 
@@ -279,7 +280,7 @@ async fn handle_interactive_selector() {
 
         if let Some(target) = selected_server {
             println!("\n  {} Starte Verbindung zu '{}'...", "►".bright_cyan(), target.name.bold());
-            let _ = run_ssh_session(&target, session.as_ref());
+            let _ = run_ssh_session(&target, session.as_ref()).await;
             println!("\nDrücke [ENTER] um zur Serverliste zurückzukehren...");
             let mut _b = String::new();
             let _ = stdin().read_line(&mut _b);
@@ -464,7 +465,7 @@ fn handle_interactive_edit() {
     }
 }
 
-fn handle_interactive_tunnel() {
+async fn handle_interactive_tunnel() {
     let vault = load_vault();
     if vault.servers.is_empty() {
         println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
@@ -499,13 +500,13 @@ fn handle_interactive_tunnel() {
         let forward = forward.trim();
         if forward.is_empty() { return; }
 
-        if let Err(e) = tunnel::run_tunnel(&target_server, forward) {
+        if let Err(e) = tunnel::run_tunnel(&target_server, forward).await {
             eprintln!("  {} Tunnel-Fehler: {}", "✗".bright_red(), e);
         }
     }
 }
 
-fn handle_interactive_info() {
+async fn handle_interactive_info() {
     let vault = load_vault();
     if vault.servers.is_empty() {
         println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
@@ -533,14 +534,14 @@ fn handle_interactive_info() {
     };
 
     if let Some(target_server) = target {
-        probe::print_server_health(&target_server);
+        probe::print_server_health(&target_server).await;
         println!("\nDrücke [ENTER] um fortzufahren...");
         let mut _b = String::new();
         let _ = stdin().read_line(&mut _b);
     }
 }
 
-fn handle_interactive_transfer() {
+async fn handle_interactive_transfer() {
     let vault = load_vault();
     if vault.servers.is_empty() {
         println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
@@ -585,7 +586,7 @@ fn handle_interactive_transfer() {
             let remote = remote.trim();
             let remote_opt = if remote.is_empty() { None } else { Some(remote) };
 
-            if let Err(e) = transfer::push_file(&srv_name, local, remote_opt) {
+            if let Err(e) = transfer::push_file(&srv_name, local, remote_opt).await {
                 eprintln!("  {} Fehler: {}\n", "✗".bright_red(), e);
             }
         }
@@ -618,7 +619,7 @@ fn handle_interactive_transfer() {
             let local = local.trim();
             let local_opt = if local.is_empty() { None } else { Some(local) };
 
-            if let Err(e) = transfer::pull_file(&srv_name, remote, local_opt) {
+            if let Err(e) = transfer::pull_file(&srv_name, remote, local_opt).await {
                 eprintln!("  {} Fehler: {}\n", "✗".bright_red(), e);
             }
         }
@@ -657,7 +658,7 @@ async fn handle_tui() {
         match run_tui() {
             Ok(Some(TuiAction::Connect(server))) => {
                 let session = load_session();
-                let _ = run_ssh_session(&server, session.as_ref());
+                let _ = run_ssh_session(&server, session.as_ref()).await;
                 println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
                 let mut buf = String::new();
                 let _ = std::io::stdin().read_line(&mut buf);
@@ -669,7 +670,7 @@ async fn handle_tui() {
                 handle_interactive_add();
             }
             Ok(Some(TuiAction::TriggerInfo(server))) => {
-                probe::print_server_health(&server.name);
+                probe::print_server_health(&server.name).await;
                 println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
                 let mut buf = String::new();
                 let _ = std::io::stdin().read_line(&mut buf);
@@ -681,7 +682,7 @@ async fn handle_tui() {
                 let _ = stdin().read_line(&mut forward);
                 let forward = forward.trim();
                 if !forward.is_empty() {
-                    let _ = tunnel::run_tunnel(&server.name, forward);
+                    let _ = tunnel::run_tunnel(&server.name, forward).await;
                 }
                 println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
                 let mut buf = String::new();
@@ -726,7 +727,7 @@ async fn handle_connect(target: &str, user_override: Option<String>, port_overri
         }
     };
 
-    if let Err(e) = run_ssh_session(&server, session.as_ref()) {
+    if let Err(e) = run_ssh_session(&server, session.as_ref()).await {
         eprintln!("  {} Verbindungsfehler: {}", "✗".bright_red(), e);
     }
 }

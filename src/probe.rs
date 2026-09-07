@@ -1,9 +1,7 @@
-﻿use std::process::Command;
 use std::time::Instant;
 use colored::*;
 use crate::config::load_session;
 use crate::vault::{find_server, load_vault, ServerEntry};
-use crate::cert::generate_ephemeral_certificate;
 
 #[derive(Debug, Clone)]
 pub struct ServerHealthStats {
@@ -23,7 +21,7 @@ pub struct ServerHealthStats {
     pub disk_percent: f64,
 }
 
-pub fn fetch_server_health(target_query: &str) -> Result<ServerHealthStats, String> {
+pub async fn fetch_server_health(target_query: &str) -> Result<ServerHealthStats, String> {
     let vault = load_vault();
     let session = load_session();
 
@@ -49,41 +47,17 @@ pub fn fetch_server_health(target_query: &str) -> Result<ServerHealthStats, Stri
         }
     };
 
-    let username = session.as_ref().map(|s| s.username.as_str()).unwrap_or("leonf");
-    let principals = [server.user.as_str(), "root", "leonf", "admin"];
-    let cert_bundle = generate_ephemeral_certificate(username, &principals, 8)?;
-
     // Non-interactive Remote Batch Telemetrie-Befehl
     let remote_cmd = "cat /proc/loadavg; echo '---SB_SEP---'; free -b; echo '---SB_SEP---'; df -k /; echo '---SB_SEP---'; uptime -p 2>/dev/null || uptime";
 
-    let cert_arg = format!("CertificateFile={}", cert_bundle.cert_path.display());
-    let target_dest = format!("{}@{}", server.user, server.host);
-
     let start_time = Instant::now();
-    let mut cmd = Command::new("ssh");
-    cmd.arg("-p").arg(server.port.to_string())
-       .arg("-o").arg(cert_arg)
-       .arg("-i").arg(&cert_bundle.private_key_path)
-       .arg("-o").arg("ConnectTimeout=5")
-       .arg("-o").arg("BatchMode=yes")
-       .arg("-o").arg("StrictHostKeyChecking=accept-new");
-
-    if let Some(ref id_file) = server.identity_file {
-        cmd.arg("-i").arg(id_file);
-    }
-
-    cmd.arg(&target_dest).arg(remote_cmd);
-
-    let output = cmd.output().map_err(|e| format!("SSH-Prozess konnte nicht ausgeführt werden: {}", e))?;
+    let (exit_code, stdout_str, stderr_str) = crate::native_ssh::run_remote_command(&server, remote_cmd, session.as_ref()).await?;
     let duration = start_time.elapsed();
     let latency_ms = duration.as_secs_f64() * 1000.0;
 
-    if !output.status.success() {
-        let err_text = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Remote-Befehl fehlgeschlagen (Exit: {:?}): {}", output.status.code(), err_text.trim()));
+    if exit_code != 0 {
+        return Err(format!("Remote-Befehl fehlgeschlagen (Exit: {}): {}", exit_code, stderr_str.trim()));
     }
-
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
     let sections: Vec<&str> = stdout_str.split("---SB_SEP---").collect();
 
     // 1. Loadavg
@@ -186,10 +160,10 @@ fn progress_bar(percent: f64, width: usize) -> String {
     }
 }
 
-pub fn print_server_health(target: &str) {
+pub async fn print_server_health(target: &str) {
     println!("  {} Führe Remote-Health-Probe für '{}' durch...", "►".bright_cyan(), target.bold());
 
-    match fetch_server_health(target) {
+    match fetch_server_health(target).await {
         Ok(stats) => {
             println!("\n{}", "══════════════════════════════════════════════════════════════════".bright_black());
             println!("  {} {} {}", "S&B NETGATE".bright_blue().bold(), "//".bright_black(), "REMOTE SERVER HEALTH PROBE".bold());

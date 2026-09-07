@@ -1,9 +1,7 @@
-use std::process::Command;
 use std::time::Instant;
 use colored::*;
 use crate::config::load_session;
 use crate::vault::{load_vault, ServerEntry};
-use crate::cert::generate_ephemeral_certificate;
 
 pub struct ExecResult {
     pub server_name: String,
@@ -46,56 +44,24 @@ pub async fn run_broadcast_exec(
     println!("  {} Server:  {} Ziele (parallele Ausführung)", "►".bright_cyan(), targets.len());
     println!("{}", "──────────────────────────────────────────────────────────────────────────────────────".bright_black());
 
-    let username = session.as_ref().map(|s| s.username.clone()).unwrap_or_else(|| "leonf".to_string());
     let mut tasks = Vec::new();
 
     for server in targets {
         let cmd_string = command_str.to_string();
-        let user_clone = username.clone();
+        let session_clone = session.clone();
 
-        let handle = tokio::task::spawn_blocking(move || {
+        let handle = tokio::spawn(async move {
             let start = Instant::now();
-            let principals = [server.user.as_str(), "root", "leonf", "admin"];
-            let cert_bundle = match generate_ephemeral_certificate(&user_clone, &principals, 8) {
-                Ok(b) => b,
-                Err(e) => return ExecResult {
-                    server_name: server.name,
-                    host: server.host,
-                    success: false,
-                    exit_code: None,
-                    stdout: String::new(),
-                    stderr: format!("Zertifikatsfehler: {}", e),
-                    duration_ms: start.elapsed().as_secs_f64() * 1000.0,
-                },
-            };
-
-            let cert_arg = format!("CertificateFile={}", cert_bundle.cert_path.display());
-            let target_dest = format!("{}@{}", server.user, server.host);
-
-            let mut cmd = Command::new("ssh");
-            cmd.arg("-p").arg(server.port.to_string())
-               .arg("-o").arg(cert_arg)
-               .arg("-i").arg(&cert_bundle.private_key_path)
-               .arg("-o").arg("ConnectTimeout=6")
-               .arg("-o").arg("BatchMode=yes")
-               .arg("-o").arg("StrictHostKeyChecking=accept-new");
-
-            if let Some(ref id_file) = server.identity_file {
-                cmd.arg("-i").arg(id_file);
-            }
-
-            cmd.arg(&target_dest).arg(&cmd_string);
-
-            match cmd.output() {
-                Ok(out) => {
+            match crate::native_ssh::run_remote_command(&server, &cmd_string, session_clone.as_ref()).await {
+                Ok((exit_code, stdout, stderr)) => {
                     let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
                     ExecResult {
                         server_name: server.name,
                         host: server.host,
-                        success: out.status.success(),
-                        exit_code: out.status.code(),
-                        stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-                        stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+                        success: exit_code == 0,
+                        exit_code: Some(exit_code),
+                        stdout,
+                        stderr,
                         duration_ms,
                     }
                 }
@@ -107,7 +73,7 @@ pub async fn run_broadcast_exec(
                         success: false,
                         exit_code: None,
                         stdout: String::new(),
-                        stderr: format!("Fehler beim Prozessstart: {}", e),
+                        stderr: e,
                         duration_ms,
                     }
                 }
