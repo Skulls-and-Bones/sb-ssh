@@ -4,7 +4,8 @@
 > *Sicherheitsmarke: Skulls & Bones ([skulls-and-bones.org](https://www.skulls-and-bones.org))*
 
 [![Rust](https://img.shields.io/badge/Language-Rust_2021-orange.svg?style=flat-square)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Free & Open Source](https://img.shields.io/badge/Cost-100%25_Free_%26_Open--Source-brightgreen.svg?style=flat-square)](#)
 [![Compliance](https://img.shields.io/badge/BSI_IT--Grundschutz-OPS.1.1.4_%26_DER.1-brightgreen.svg?style=flat-square)](https://www.bsi.bund.de)
 [![Zero-Dependency](https://img.shields.io/badge/Dependencies-100%25_Pure--Rust-blueviolet.svg?style=flat-square)](#)
 
@@ -200,7 +201,9 @@ Folge den zwei angezeigten Befehlen (Public Key hinterlegen & `sshd_config` anpa
 
 ---
 
-## 🔒 Lizenz & Sicherheit
-Entwickelt von **Skulls & Bones Lab** ([skulls-and-bones.org](https://www.skulls-and-bones.org)).  
-Lizenziert unter der MIT-Lizenz.
+## 🔒 Lizenz & Kosten
+**S&B NetGate (`sb-ssh`) ist und bleibt 100% kostenlos und quelloffen.**
+* Lizenziert unter der liberalen **MIT-Lizenz**.
+* Vollständig frei nutzbar für private, universitäre und kommerzielle Zwecke ohne Lizenzgebühren, ohne Registrierungspflicht und ohne versteckte Kosten.
+* Entwickelt von **Skulls & Bones Lab** ([skulls-and-bones.org](https://www.skulls-and-bones.org)).
 
