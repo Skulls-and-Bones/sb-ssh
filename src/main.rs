@@ -1,4 +1,4 @@
-﻿mod cli;
+mod cli;
 mod config;
 mod vault;
 mod cert;
@@ -6,6 +6,7 @@ mod auth;
 mod runner;
 mod tui;
 
+use std::io::{stdin, stdout, Write};
 use clap::Parser;
 use colored::*;
 use cli::{Cli, Commands};
@@ -21,7 +22,10 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        None | Some(Commands::Tui) => {
+        None => {
+            handle_interactive_selector().await;
+        }
+        Some(Commands::Tui) => {
             handle_tui().await;
         }
         Some(Commands::Connect { target, user, port }) => {
@@ -101,6 +105,175 @@ async fn main() {
         Some(Commands::ServerInit) => {
             handle_server_init();
         }
+    }
+}
+
+async fn handle_interactive_selector() {
+    loop {
+        let vault = load_vault();
+        let session = load_session();
+
+        println!("{}", "══════════════════════════════════════════════════════════════════════════════════════".bright_black());
+        println!("  {} {} {}", "S&B NETGATE".bright_blue().bold(), "//".bright_black(), "VERFÜGBARE SERVER & ZIELE".bold());
+        println!("{}", "══════════════════════════════════════════════════════════════════════════════════════".bright_black());
+
+        if vault.servers.is_empty() {
+            println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
+            println!("  Tipp: Drücke [+] um einen Server hinzuzufügen.");
+        } else {
+            println!(
+                "  {:<6} {:<20} {:<24} {:<10} {:<12} {}",
+                "NR.".bold(),
+                "NAME".bold(),
+                "ZIEL (HOST:PORT)".bold(),
+                "BENUTZER".bold(),
+                "LATENZ".bold(),
+                "TAGS".bold()
+            );
+            println!("  {}", "─".repeat(82).bright_black());
+
+            for (idx, srv) in vault.servers.iter().enumerate() {
+                let num_str = format!("[{}]", idx + 1);
+                let latency_str = match check_server_latency(&srv.host, srv.port) {
+                    Some(d) => format!("{:.1}ms", d.as_secs_f64() * 1000.0).bright_green().to_string(),
+                    None => "OFFLINE".bright_red().to_string(),
+                };
+                let tags_str = srv.tags.join(", ");
+                let host_port = format!("{}:{}", srv.host, srv.port);
+
+                println!(
+                    "  {:<6} {:<20} {:<24} {:<10} {:<12} {}",
+                    num_str.bright_yellow().bold(),
+                    srv.name.bright_white().bold(),
+                    host_port,
+                    srv.user.bright_cyan(),
+                    latency_str,
+                    tags_str.bright_black()
+                );
+            }
+        }
+
+        println!("{}", "══════════════════════════════════════════════════════════════════════════════════════".bright_black());
+        println!(
+            "  {} {}   {} {}   {} {}   {} {}",
+            "[1-N / Enter]".bright_yellow().bold(), "Verbinden",
+            "[+]".bright_cyan().bold(), "Server hinzufügen",
+            "[t]".bright_cyan().bold(), "Vollbild-TUI",
+            "[q]".bright_black().bold(), "Beenden"
+        );
+        print!("\n  {} Ziel auswählen [1-{}, Name oder Aktion] (Standard: [1]): ", "►".bright_cyan(), vault.servers.len().max(1));
+        let _ = stdout().flush();
+
+        let mut input = String::new();
+        if stdin().read_line(&mut input).is_err() {
+            break;
+        }
+        let choice = input.trim();
+
+        if choice.eq_ignore_ascii_case("q") || choice.eq_ignore_ascii_case("exit") {
+            println!("  Auf Wiedersehen!");
+            break;
+        }
+
+        if choice.eq_ignore_ascii_case("t") || choice.eq_ignore_ascii_case("tui") {
+            handle_tui().await;
+            continue;
+        }
+
+        if choice.eq_ignore_ascii_case("s") || choice.eq_ignore_ascii_case("status") {
+            handle_status();
+            println!("\nDrücke [ENTER] um fortzufahren...");
+            let mut _b = String::new();
+            let _ = stdin().read_line(&mut _b);
+            continue;
+        }
+
+        if choice == "+" || choice.eq_ignore_ascii_case("add") {
+            handle_interactive_add();
+            continue;
+        }
+
+        // Nummer wählen oder Standard [1]
+        let selected_server = if choice.is_empty() {
+            vault.servers.first().cloned()
+        } else if let Ok(num) = choice.parse::<usize>() {
+            if num >= 1 && num <= vault.servers.len() {
+                vault.servers.get(num - 1).cloned()
+            } else {
+                eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
+                continue;
+            }
+        } else {
+            // Nach Name oder IP suchen
+            vault.servers.iter().find(|s| s.name.eq_ignore_ascii_case(choice) || s.host.eq_ignore_ascii_case(choice)).cloned()
+        };
+
+        if let Some(target) = selected_server {
+            println!("\n  {} Starte Verbindung zu '{}'...", "►".bright_cyan(), target.name.bold());
+            let _ = run_ssh_session(&target, session.as_ref());
+            println!("\nDrücke [ENTER] um zur Serverliste zurückzukehren...");
+            let mut _b = String::new();
+            let _ = stdin().read_line(&mut _b);
+        } else {
+            eprintln!("  {} Server '{}' nicht gefunden.", "✗".bright_red(), choice);
+        }
+    }
+}
+
+fn handle_interactive_add() {
+    println!("\n{}", "── NEUEN SERVER ZUM TRESOR HINZUFÜGEN ──".bright_cyan());
+
+    print!("  Server-Alias / Name (z.B. vps-backup): ");
+    let _ = stdout().flush();
+    let mut name = String::new();
+    let _ = stdin().read_line(&mut name);
+    let name = name.trim().to_string();
+    if name.is_empty() { return; }
+
+    print!("  Host / IP-Adresse: ");
+    let _ = stdout().flush();
+    let mut host = String::new();
+    let _ = stdin().read_line(&mut host);
+    let host = host.trim().to_string();
+    if host.is_empty() { return; }
+
+    print!("  SSH Benutzer (Standard: leonf): ");
+    let _ = stdout().flush();
+    let mut user = String::new();
+    let _ = stdin().read_line(&mut user);
+    let user = user.trim();
+    let user = if user.is_empty() { "leonf".to_string() } else { user.to_string() };
+
+    print!("  SSH Port (Standard: 22): ");
+    let _ = stdout().flush();
+    let mut port_str = String::new();
+    let _ = stdin().read_line(&mut port_str);
+    let port = port_str.trim().parse::<u16>().unwrap_or(22);
+
+    print!("  Tags (kommagetrennt, z.B. prod, vps): ");
+    let _ = stdout().flush();
+    let mut tags_str = String::new();
+    let _ = stdin().read_line(&mut tags_str);
+    let tags = tags_str
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let entry = ServerEntry {
+        name: name.clone(),
+        host,
+        port,
+        user,
+        tags,
+        identity_file: None,
+        description: Some("Manuell hinzugefügt".to_string()),
+        last_connected: None,
+    };
+
+    match add_server(entry) {
+        Ok(_) => println!("  {} Server '{}' erfolgreich gespeichert!\n", "✓".bright_green(), name.bold()),
+        Err(e) => eprintln!("  {} Fehler: {}\n", "✗".bright_red(), e),
     }
 }
 

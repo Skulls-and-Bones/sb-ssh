@@ -1,4 +1,4 @@
-﻿use std::path::PathBuf;
+use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use crate::config::get_sb_dir;
 
@@ -27,28 +27,135 @@ fn vault_path() -> PathBuf {
 
 pub fn load_vault() -> ServerVault {
     let path = vault_path();
-    if path.exists() {
+    let mut vault = if path.exists() {
         if let Ok(content) = std::fs::read_to_string(&path) {
-            if let Ok(vault) = toml::from_str::<ServerVault>(&content) {
-                return vault;
+            toml::from_str::<ServerVault>(&content).unwrap_or_default()
+        } else {
+            ServerVault::default()
+        }
+    } else {
+        ServerVault::default()
+    };
+
+    // Default Seed: Hostinger VPS falls leer
+    if vault.servers.is_empty() {
+        vault.servers.push(ServerEntry {
+            name: "hostinger-prod".to_string(),
+            host: "145.223.83.235".to_string(),
+            port: 22,
+            user: "leonf".to_string(),
+            tags: vec!["prod".to_string(), "web".to_string(), "nginx".to_string()],
+            identity_file: None,
+            description: Some("Hostinger Production VPS (skulls-and-bones.org)".to_string()),
+            last_connected: None,
+        });
+        let _ = save_vault(&vault);
+    }
+
+    // Automatisch Hosts aus ~/.ssh/config synchronisieren
+    let _ = sync_ssh_config_servers(&mut vault);
+
+    vault
+}
+
+pub fn sync_ssh_config_servers(vault: &mut ServerVault) -> bool {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return false,
+    };
+    let config_path = home.join(".ssh").join("config");
+    if !config_path.exists() {
+        return false;
+    }
+
+    let content = match std::fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    let mut added_any = false;
+    let mut current_host: Option<String> = None;
+    let mut current_hostname: Option<String> = None;
+    let mut current_user: Option<String> = None;
+    let mut current_port: u16 = 22;
+    let mut current_identity: Option<String> = None;
+
+    let flush = |v: &mut ServerVault,
+                 h: &Option<String>,
+                 hn: &Option<String>,
+                 u: &Option<String>,
+                 p: u16,
+                 idf: &Option<String>| -> bool {
+        if let Some(name) = h {
+            if name == "*" || name.contains('?') || name.contains(' ') {
+                return false;
             }
+            let host = hn.clone().unwrap_or_else(|| name.clone());
+            // Prüfe, ob Host oder Name schon im Vault existiert
+            if !v.servers.iter().any(|s| s.name.eq_ignore_ascii_case(name)) {
+                v.servers.push(ServerEntry {
+                    name: name.clone(),
+                    host,
+                    port: p,
+                    user: u.clone().unwrap_or_else(|| "leonf".to_string()),
+                    tags: vec!["ssh-config".to_string()],
+                    identity_file: idf.clone(),
+                    description: Some("Importiert aus ~/.ssh/config".to_string()),
+                    last_connected: None,
+                });
+                return true;
+            }
+        }
+        false
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let mut parts = trimmed.split_whitespace();
+        let key = parts.next().unwrap_or("").to_lowercase();
+        let val = parts.collect::<Vec<&str>>().join(" ");
+
+        match key.as_str() {
+            "host" => {
+                if flush(vault, &current_host, &current_hostname, &current_user, current_port, &current_identity) {
+                    added_any = true;
+                }
+                current_host = Some(val);
+                current_hostname = None;
+                current_user = None;
+                current_port = 22;
+                current_identity = None;
+            }
+            "hostname" => {
+                current_hostname = Some(val);
+            }
+            "user" => {
+                current_user = Some(val);
+            }
+            "port" => {
+                if let Ok(p) = val.parse::<u16>() {
+                    current_port = p;
+                }
+            }
+            "identityfile" => {
+                current_identity = Some(val);
+            }
+            _ => {}
         }
     }
 
-    // Default Seed: Unser Hostinger VPS Server!
-    let mut default_vault = ServerVault::default();
-    default_vault.servers.push(ServerEntry {
-        name: "hostinger-prod".to_string(),
-        host: "145.223.83.235".to_string(),
-        port: 22,
-        user: "leonf".to_string(),
-        tags: vec!["prod".to_string(), "web".to_string(), "nginx".to_string()],
-        identity_file: None,
-        description: Some("Hostinger Production VPS (skulls-and-bones.org)".to_string()),
-        last_connected: None,
-    });
-    let _ = save_vault(&default_vault);
-    default_vault
+    if flush(vault, &current_host, &current_hostname, &current_user, current_port, &current_identity) {
+        added_any = true;
+    }
+
+    if added_any {
+        let _ = save_vault(vault);
+    }
+    added_any
 }
 
 pub fn save_vault(vault: &ServerVault) -> std::io::Result<()> {
