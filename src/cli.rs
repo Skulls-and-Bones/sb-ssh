@@ -100,6 +100,38 @@ pub enum Commands {
         target: String,
     },
 
+    /// Lädt eine lokale Datei oder ein Verzeichnis auf den Zielserver hoch (Push)
+    Push {
+        /// Zielserver aus dem Tresor oder Adresse (z.B. 'hostinger-prod')
+        target: String,
+        /// Pfad zur lokalen Quelldatei
+        local_path: String,
+        /// Optionaler entfernter Zielpfad (Standard: './<dateiname>')
+        remote_path: Option<String>,
+    },
+
+    /// Lädt eine entfernte Datei vom Zielserver herunter (Pull)
+    Pull {
+        /// Quellserver aus dem Tresor oder Adresse (z.B. 'hostinger-prod')
+        target: String,
+        /// Pfad zur entfernten Datei auf dem Server
+        remote_path: String,
+        /// Optionaler lokaler Zielpfad (Standard: aktuelles Verzeichnis)
+        local_path: Option<String>,
+    },
+
+    /// Führt einen Befehl parallel auf mehreren oder allen Servern aus (Broadcast)
+    Exec {
+        /// Der auszuführende Remote-Befehl (z.B. 'uptime' oder 'df -h')
+        command_to_run: String,
+        /// Zielserver oder 'all' (Standard: 'all')
+        #[arg(short, long, default_value = "all")]
+        target: String,
+        /// Optionaler Tag-Filter (z.B. 'prod')
+        #[arg(long)]
+        tag: Option<String>,
+    },
+
     /// Gibt die 1-Klick Anleitung & Konfiguration aus, um Ziel-Server für S&B CA zu rüsten
     ServerInit,
 }

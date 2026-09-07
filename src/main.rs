@@ -7,6 +7,8 @@ mod runner;
 mod tui;
 mod tunnel;
 mod probe;
+mod transfer;
+mod exec;
 
 use std::io::{stdin, stdout, Write};
 use clap::Parser;
@@ -112,6 +114,22 @@ async fn main() {
         Some(Commands::Info { target }) => {
             probe::print_server_health(&target);
         }
+        Some(Commands::Push { target, local_path, remote_path }) => {
+            if let Err(e) = transfer::push_file(&target, &local_path, remote_path.as_deref()) {
+                eprintln!("  {} Upload-Fehler: {}", "✗".bright_red(), e);
+            }
+        }
+        Some(Commands::Pull { target, remote_path, local_path }) => {
+            if let Err(e) = transfer::pull_file(&target, &remote_path, local_path.as_deref()) {
+                eprintln!("  {} Download-Fehler: {}", "✗".bright_red(), e);
+            }
+        }
+        Some(Commands::Exec { command_to_run, target, tag }) => {
+            let target_sel = if target.eq_ignore_ascii_case("all") { None } else { Some(target.as_str()) };
+            if let Err(e) = exec::run_broadcast_exec(target_sel, &command_to_run, tag.as_deref()).await {
+                eprintln!("  {} Broadcast-Fehler: {}", "✗".bright_red(), e);
+            }
+        }
         Some(Commands::ServerInit) => {
             handle_server_init();
         }
@@ -165,13 +183,15 @@ async fn handle_interactive_selector() {
 
         println!("{}", "══════════════════════════════════════════════════════════════════════════════════════".bright_black());
         println!(
-            "  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}",
+            "  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}\n  {} {}   {} {}",
             "[1-N / Enter]".bright_yellow().bold(), "Verbinden",
             "[+]".bright_cyan().bold(), "Server hinzufügen",
             "[-]".bright_red().bold(), "Server löschen",
             "[e]".bright_magenta().bold(), "Bearbeiten",
             "[u]".bright_blue().bold(), "SSH-Tunnel",
             "[i]".bright_green().bold(), "Health-Probe",
+            "[p]".bright_magenta().bold(), "Transfer (SCP)",
+            "[x]".bright_yellow().bold(), "Broadcast (Exec)",
             "[r]".bright_yellow().bold(), "Neu messen",
             "[t]".bright_cyan().bold(), "Vollbild-TUI",
             "[q]".bright_black().bold(), "Beenden"
@@ -201,6 +221,16 @@ async fn handle_interactive_selector() {
 
         if choice.eq_ignore_ascii_case("i") || choice.eq_ignore_ascii_case("info") {
             handle_interactive_info();
+            continue;
+        }
+
+        if choice.eq_ignore_ascii_case("p") || choice.eq_ignore_ascii_case("transfer") || choice.eq_ignore_ascii_case("scp") {
+            handle_interactive_transfer();
+            continue;
+        }
+
+        if choice.eq_ignore_ascii_case("x") || choice.eq_ignore_ascii_case("exec") {
+            handle_interactive_exec().await;
             continue;
         }
 
@@ -507,6 +537,118 @@ fn handle_interactive_info() {
         println!("\nDrücke [ENTER] um fortzufahren...");
         let mut _b = String::new();
         let _ = stdin().read_line(&mut _b);
+    }
+}
+
+fn handle_interactive_transfer() {
+    let vault = load_vault();
+    if vault.servers.is_empty() {
+        println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
+        return;
+    }
+
+    println!("\n{}", "── DATEI-TRANSFER (SCP) ──".bright_magenta());
+    println!("  [1] Upload (Push):   Lokale Datei -> Remote Server");
+    println!("  [2] Download (Pull): Remote Datei -> Lokaler Rechner");
+    print!("  Aktion wählen [1/2 oder Enter zum Abbrechen]: ");
+    let _ = stdout().flush();
+    let mut act = String::new();
+    let _ = stdin().read_line(&mut act);
+    let act = act.trim();
+
+    if act == "1" || act.eq_ignore_ascii_case("push") {
+        print!("  Zielserver [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
+        let _ = stdout().flush();
+        let mut target = String::new();
+        let _ = stdin().read_line(&mut target);
+        let target = target.trim();
+        let target_srv = if target.is_empty() {
+            vault.servers.first().map(|s| s.name.clone())
+        } else if let Ok(num) = target.parse::<usize>() {
+            vault.servers.get(num.saturating_sub(1)).map(|s| s.name.clone())
+        } else {
+            Some(target.to_string())
+        };
+
+        if let Some(srv_name) = target_srv {
+            print!("  Lokaler Dateipfad: ");
+            let _ = stdout().flush();
+            let mut local = String::new();
+            let _ = stdin().read_line(&mut local);
+            let local = local.trim();
+            if local.is_empty() { return; }
+
+            print!("  Entfernter Zielpfad (z.B. '/tmp/' oder Enter für Home): ");
+            let _ = stdout().flush();
+            let mut remote = String::new();
+            let _ = stdin().read_line(&mut remote);
+            let remote = remote.trim();
+            let remote_opt = if remote.is_empty() { None } else { Some(remote) };
+
+            if let Err(e) = transfer::push_file(&srv_name, local, remote_opt) {
+                eprintln!("  {} Fehler: {}\n", "✗".bright_red(), e);
+            }
+        }
+    } else if act == "2" || act.eq_ignore_ascii_case("pull") {
+        print!("  Quellserver [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
+        let _ = stdout().flush();
+        let mut target = String::new();
+        let _ = stdin().read_line(&mut target);
+        let target = target.trim();
+        let target_srv = if target.is_empty() {
+            vault.servers.first().map(|s| s.name.clone())
+        } else if let Ok(num) = target.parse::<usize>() {
+            vault.servers.get(num.saturating_sub(1)).map(|s| s.name.clone())
+        } else {
+            Some(target.to_string())
+        };
+
+        if let Some(srv_name) = target_srv {
+            print!("  Entfernter Dateipfad (z.B. '/var/log/nginx/access.log'): ");
+            let _ = stdout().flush();
+            let mut remote = String::new();
+            let _ = stdin().read_line(&mut remote);
+            let remote = remote.trim();
+            if remote.is_empty() { return; }
+
+            print!("  Lokaler Zielpfad (Enter für aktuelles Verzeichnis '.'): ");
+            let _ = stdout().flush();
+            let mut local = String::new();
+            let _ = stdin().read_line(&mut local);
+            let local = local.trim();
+            let local_opt = if local.is_empty() { None } else { Some(local) };
+
+            if let Err(e) = transfer::pull_file(&srv_name, remote, local_opt) {
+                eprintln!("  {} Fehler: {}\n", "✗".bright_red(), e);
+            }
+        }
+    }
+}
+
+async fn handle_interactive_exec() {
+    let vault = load_vault();
+    if vault.servers.is_empty() {
+        println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
+        return;
+    }
+
+    println!("\n{}", "── MULTI-SERVER BROADCAST EXECUTION ──".bright_yellow());
+    print!("  Zielgruppe wählen ['all', Tag oder Server-Name] (Standard: 'all'): ");
+    let _ = stdout().flush();
+    let mut target = String::new();
+    let _ = stdin().read_line(&mut target);
+    let target = target.trim();
+    let target_opt = if target.is_empty() || target.eq_ignore_ascii_case("all") { None } else { Some(target) };
+
+    print!("  Auszuführender Remote-Befehl (z.B. 'uptime' oder 'df -h /'): ");
+    let _ = stdout().flush();
+    let mut cmd_str = String::new();
+    let _ = stdin().read_line(&mut cmd_str);
+    let cmd_str = cmd_str.trim();
+    if cmd_str.is_empty() { return; }
+
+    if let Err(e) = exec::run_broadcast_exec(target_opt, cmd_str, None).await {
+        eprintln!("  {} Broadcast-Fehler: {}\n", "✗".bright_red(), e);
     }
 }
 

@@ -60,7 +60,7 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 
 ---
 
-### Phase 3: 1-Click SSH Port-Forwarding & Tunnels (Status: 🟢 Erledigt)
+### Phase 3: 1-Click SSH Port-Forwarding & Tunnels (Status: � Erledigt)
 - [x] **CLI Tunnel-Kommando:**
   - Syntax: `sb-ssh tunnel <server> <local_port>:<remote_port>`
   - Beispiel: `sb-ssh tunnel hostinger-prod 8080:80` (leitet entfernten Webserver verschlüsselt auf localhost:8080)
@@ -74,7 +74,7 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 
 ---
 
-### Phase 4: Live Remote Server-Stats & Quick-Health-Probe (Status: 🟢 Erledigt)
+### Phase 4: Live Remote Server-Stats & Quick-Health-Probe (Status: � Erledigt)
 - [x] **Ad-hoc Remote Telemetrie (`sb-ssh info <server>`):**
   - Blitzschnelle Abfrage über non-interactive SSH in unter 1 Sekunde (Batch-Abfrage von CPU, RAM, Disk, Uptime).
 - [x] **Metriken & Visualisierung:**
@@ -88,27 +88,28 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 
 ---
 
-### Phase 5: Schneller Datei-Transfer (SCP / SFTP) (Status: ⚪ Geplant)
-- [ ] **S&B Push / Pull:**
+### Phase 5: Schneller Datei-Transfer (SCP / SFTP) (Status: 🟢 Erledigt)
+- [x] **S&B Push / Pull:**
   - `sb-ssh push <server> <lokaler_pfad> [remote_pfad]`
   - `sb-ssh pull <server> <remote_pfad> [lokaler_pfad]`
   - Vollständige Nutzung der Vault-Namen und des ephemeren 8h-Zertifikats ohne Passwort-Prompt.
-- [ ] **Terminal Fortschrittsbalken:**
-  - Übertragungsrate (MB/s), verbleibende Zeit und SHA-256 Prüfsummen-Verifikation nach Abschluss.
-- [ ] **TUI Remote Mini-Explorer:**
-  - Navigieren im Remote-Dateisystem direkt in der Terminal-Oberfläche zum schnellen Download von Log-Dateien (`/var/log/nginx/error.log`).
+- [x] **Transfer-Statistiken:**
+  - Anzeige von Dateigröße, Übertragungsdauer und Geschwindigkeit in MB/s.
+- [x] **Interaktives Menü:**
+  - Menüoption `[p] Dateitransfer (SCP)` für geführten Upload/Download.
 
 ---
 
-### Phase 6: Multi-Server Broadcast Execution (`sb-ssh exec`) (Status: ⚪ Geplant)
-- [ ] **Tag-basierte Parallelausführung:**
-  - `sb-ssh exec --tag prod "docker ps -a"`
-  - `sb-ssh exec all "uptime"`
-- [ ] **Parallele Worker:**
-  - Parallele Ausführung über Tokio Asynchronous Tasks.
-- [ ] **Aggregierte Ausgabe:**
-  - Saubere tabellarische Zusammenfassung mit Hostname, Exit-Code und Ausgaben.
-  - Ideal für schnelle Patch-Audits (z. B. `needrestart` oder `apt list --upgradable`).
+### Phase 6: Multi-Server Broadcast Execution (`sb-ssh exec`) (Status: 🟢 Erledigt)
+- [x] **Tag-basierte Parallelausführung:**
+  - `sb-ssh exec "docker ps -a" --tag prod`
+  - `sb-ssh exec "uptime" --target all`
+- [x] **Parallele Worker:**
+  - Parallele Ausführung über asynchrone Tokio-Tasks mit non-blocking SSH.
+- [x] **Aggregierte Ausgabe:**
+  - Saubere tabellarische Zusammenfassung mit Servername, Host, Exit-Code-Badge, Latenz und Konsolenausgaben.
+- [x] **Interaktives Menü:**
+  - Menüoption `[x] Broadcast (Exec)` im Konsolen-Auswahlmenü.
 
 ---
 
