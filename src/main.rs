@@ -26,6 +26,12 @@ use tui::{run_tui, TuiAction};
 async fn main() {
     let cli = Cli::parse();
 
+    // Direktverbindung wenn ein Ziel übergeben wurde (Drop-in ssh replacement)
+    if let Some(target) = cli.target {
+        handle_connect(&target, None, None).await;
+        return;
+    }
+
     match cli.command {
         None => {
             handle_interactive_selector().await;

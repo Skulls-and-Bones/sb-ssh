@@ -9,6 +9,9 @@ use clap::{Parser, Subcommand};
     long_about = "S&B NetGate (sb-ssh) revolutioniert den SSH-Zugriff durch OAuth2/OIDC-Authentifizierung, kurzlebige Ed25519-Sitzungszertifikate und eine interaktive Terminal-UI. 100% autarke Rust-Binary ohne statischen Key-Sprawl."
 )]
 pub struct Cli {
+    /// Optionales Direkt-Ziel (z.B. 'hostinger-prod' oder 'user@host') für Drop-in SSH-Kompatibilität
+    pub target: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
