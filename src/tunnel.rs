@@ -46,11 +46,12 @@ pub async fn run_tunnel(target_query: &str, forward_arg: &str) -> Result<(), Str
         found.clone()
     } else {
         // Ad-hoc
+        let sys_user = crate::config::get_system_username();
         let (user, host) = if target_query.contains('@') {
             let mut parts = target_query.split('@');
-            (parts.next().unwrap_or("leonf").to_string(), parts.next().unwrap_or("").to_string())
+            (parts.next().unwrap_or(&sys_user).to_string(), parts.next().unwrap_or("").to_string())
         } else {
-            ("leonf".to_string(), target_query.to_string())
+            (sys_user, target_query.to_string())
         };
 
         ServerEntry {

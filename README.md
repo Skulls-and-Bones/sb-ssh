@@ -9,10 +9,6 @@
 [![Compliance](https://img.shields.io/badge/BSI_IT--Grundschutz-OPS.1.1.4_%26_DER.1-brightgreen.svg?style=flat-square)](https://www.bsi.bund.de)
 [![Zero-Dependency](https://img.shields.io/badge/Dependencies-100%25_Pure--Rust-blueviolet.svg?style=flat-square)](#)
 
-<p align="center">
-  <img src="assets/tui_preview.svg" alt="S&B NetGate TUI Dashboard" width="880">
-</p>
-
 ---
 
 ## ⚡ Das Problem mit herkömmlichem SSH
@@ -99,10 +95,10 @@ sb-ssh tui
 Verbindet einen Browser oder Tools direkt mit dem internen Netzwerk des Remote-Servers:
 ```bash
 # Expliziter Proxy:
-sb-ssh proxy hostinger-prod --port 1080
+sb-ssh proxy prod-server --port 1080
 
 # Oder im gewohnten OpenSSH-Stil:
-ssh -D 1080 hostinger-prod
+ssh -D 1080 prod-server
 ```
 Nutzung z. B. mit `curl`:
 ```bash
@@ -114,9 +110,9 @@ curl --socks5-hostname 127.0.0.1:1080 http://internal-db:5432
 ### 🛡️ Revisionssicheres Session-Audit & Recording
 ```bash
 # Sitzung verbinden und aufzeichnen:
-sb-ssh connect hostinger-prod --record
+sb-ssh connect prod-server --record
 # oder kurz:
-ssh hostinger-prod -r
+ssh prod-server -r
 
 # BSI IT-Grundschutz Audit-Protokoll einsehen:
 sb-ssh audit
@@ -127,10 +123,6 @@ sb-ssh audit --json
 # Aufgezeichnete Sitzung im Terminal abspielen:
 sb-ssh replay sb-20260907-182353-04a1
 ```
-
-<p align="center">
-  <img src="assets/audit_preview.svg" alt="S&B NetGate BSI Session Audit" width="880">
-</p>
 
 ---
 
@@ -148,10 +140,10 @@ sb-ssh connect db-internal
 ### 📂 SFTP Dateitransfer & Remote-Exec
 ```bash
 # Datei per nativem SFTP hochladen:
-sb-ssh push hostinger-prod ./dist/bundle.tar.gz /var/www/
+sb-ssh push prod-server ./dist/bundle.tar.gz /var/www/
 
 # Datei herunterladen:
-sb-ssh pull hostinger-prod /var/log/nginx/access.log ./access.log
+sb-ssh pull prod-server /var/log/nginx/access.log ./access.log
 
 # Befehl parallel auf allen Produktionsservern ausführen:
 sb-ssh exec "uptime" --tag prod
@@ -167,7 +159,7 @@ $env:GIT_SSH_COMMAND = "sb-ssh"
 git clone git@github.com:Skulls-and-Bones/sb-ssh.git
 
 # Batch-Kommando ausführen (gibt sauberes stdout & Exit-Code zurück):
-ssh hostinger-prod "df -h /"
+ssh prod-server "df -h /"
 ```
 
 ---

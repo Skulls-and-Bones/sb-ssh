@@ -28,11 +28,12 @@ pub async fn push_file(target_query: &str, local_path_str: &str, remote_path_opt
     let server = if let Some(found) = find_server(&vault, target_query) {
         found.clone()
     } else {
+        let sys_user = crate::config::get_system_username();
         let (user, host) = if target_query.contains('@') {
             let mut parts = target_query.split('@');
-            (parts.next().unwrap_or("leonf").to_string(), parts.next().unwrap_or("").to_string())
+            (parts.next().unwrap_or(&sys_user).to_string(), parts.next().unwrap_or("").to_string())
         } else {
-            ("leonf".to_string(), target_query.to_string())
+            (sys_user, target_query.to_string())
         };
         ServerEntry {
             name: target_query.to_string(),
@@ -134,11 +135,12 @@ pub async fn pull_file(target_query: &str, remote_path_str: &str, local_path_opt
     let server = if let Some(found) = find_server(&vault, target_query) {
         found.clone()
     } else {
+        let sys_user = crate::config::get_system_username();
         let (user, host) = if target_query.contains('@') {
             let mut parts = target_query.split('@');
-            (parts.next().unwrap_or("leonf").to_string(), parts.next().unwrap_or("").to_string())
+            (parts.next().unwrap_or(&sys_user).to_string(), parts.next().unwrap_or("").to_string())
         } else {
-            ("leonf".to_string(), target_query.to_string())
+            (sys_user, target_query.to_string())
         };
         ServerEntry {
             name: target_query.to_string(),

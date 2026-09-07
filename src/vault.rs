@@ -41,22 +41,6 @@ pub fn load_vault() -> ServerVault {
         ServerVault::default()
     };
 
-    // Default Seed: Hostinger VPS falls leer
-    if vault.servers.is_empty() {
-        vault.servers.push(ServerEntry {
-            name: "hostinger-prod".to_string(),
-            host: "145.223.83.235".to_string(),
-            port: 22,
-            user: "leonf".to_string(),
-            tags: vec!["prod".to_string(), "web".to_string(), "nginx".to_string()],
-            identity_file: None,
-            description: Some("Hostinger Production VPS (skulls-and-bones.org)".to_string()),
-            last_connected: None,
-            jump_host: None,
-        });
-        let _ = save_vault(&vault);
-    }
-
     // Automatisch Hosts aus ~/.ssh/config synchronisieren
     let _ = sync_ssh_config_servers(&mut vault);
 
@@ -108,7 +92,7 @@ pub fn sync_ssh_config_servers(vault: &mut ServerVault) -> bool {
                     name: name.clone(),
                     host,
                     port: p,
-                    user: u.clone().unwrap_or_else(|| "leonf".to_string()),
+                    user: u.clone().unwrap_or_else(crate::config::get_system_username),
                     tags: vec!["ssh-config".to_string()],
                     identity_file: idf.clone(),
                     description: Some("Importiert aus ~/.ssh/config".to_string()),

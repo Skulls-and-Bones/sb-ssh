@@ -130,9 +130,9 @@ pub async fn run_oauth_flow(provider: &str) -> Result<AuthResult, String> {
 
     // In Produktion: Token Exchange mit OAuth Provider
     // Da für lokale Testumgebungen kein Live-Secret geheim im Open-Source-Client liegen kann,
-    // extrahieren wir die Benutzeridentität oder nutzen den autorisierten GitHub-Account.
-    let username = "leonfrenzl".to_string();
-    let email = Some("leonfrenzl@googlemail.com".to_string());
+    // nutzen wir die System-Identität oder den autorisierten GitHub-Account.
+    let username = crate::config::get_system_username();
+    let email = Some(format!("{}@operator.local", username));
     let token = format!("sb_tok_{}", auth_code);
 
     let now = chrono::Utc::now();

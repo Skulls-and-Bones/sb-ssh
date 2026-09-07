@@ -11,10 +11,16 @@ pub struct AppConfig {
     pub ca_name: String,
 }
 
+pub fn get_system_username() -> String {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "operator".to_string())
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            default_user: "leonf".to_string(),
+            default_user: get_system_username(),
             oauth_provider: "github".to_string(),
             // Skulls & Bones default client id or customizable via config
             github_client_id: "Ov23liaL9b0SkullsAndBones".to_string(),

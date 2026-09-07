@@ -31,10 +31,11 @@ pub async fn connect_and_auth(
     server: &ServerEntry,
     session: Option<&UserSession>,
 ) -> Result<Handle<ClientHandler>, String> {
-    let username = session.map(|s| s.username.as_str()).unwrap_or("leonf");
+    let sys_user = crate::config::get_system_username();
+    let username = session.map(|s| s.username.as_str()).unwrap_or(&sys_user);
 
     // 1. Ephemeres Ed25519-Zertifikat erzeugen
-    let principals = [server.user.as_str(), "root", "leonf", "ubuntu", "admin"];
+    let principals = [server.user.as_str(), "root", username, "ubuntu", "admin"];
     let bundle: EphemeralCertBundle = generate_ephemeral_certificate(username, &principals, 8)
         .map_err(|e| format!("Zertifikatsfehler: {}", e))?;
 
@@ -176,7 +177,8 @@ pub async fn run_interactive_shell(
     );
     println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
 
-    let username = session.map(|s| s.username.as_str()).unwrap_or("leonf");
+    let sys_user = crate::config::get_system_username();
+    let username = session.map(|s| s.username.as_str()).unwrap_or(&sys_user);
     println!("  {} Ziel:       {}@{}:{}", "►".bright_cyan(), server.user.bright_yellow(), server.host.bright_white(), server.port);
     if let Some(ref jh) = server.jump_host {
         println!("  {} Bastion:    {}", "►".bright_cyan(), jh.bright_magenta());

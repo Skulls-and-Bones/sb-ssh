@@ -138,7 +138,8 @@ async fn main() {
         }
         Some(Commands::Cert { hours }) => {
             let session = load_session();
-            let user = session.as_ref().map(|s| s.username.as_str()).unwrap_or("leonf");
+            let sys_user = crate::config::get_system_username();
+            let user = session.as_ref().map(|s| s.username.as_str()).unwrap_or(&sys_user);
             println!("  {} Erzeuge ephemeres OpenSSH Ed25519-Zertifikat für '{}' ({}h)...", "►".bright_cyan(), user.bold(), hours);
             match generate_ephemeral_certificate(user, &[user, "root", "admin"], hours) {
                 Ok(bundle) => {
@@ -199,11 +200,12 @@ async fn handle_proxy(target: &str, port: u16) {
     let server = if let Some(s) = find_server(&vault, target) {
         s.clone()
     } else {
+        let sys_user = crate::config::get_system_username();
         let (parsed_user, parsed_host) = if target.contains('@') {
             let mut parts = target.split('@');
-            (parts.next().unwrap_or("leonf").to_string(), parts.next().unwrap_or("").to_string())
+            (parts.next().unwrap_or(&sys_user).to_string(), parts.next().unwrap_or("").to_string())
         } else {
-            ("leonf".to_string(), target.to_string())
+            (sys_user, target.to_string())
         };
         ServerEntry {
             name: target.to_string(),
@@ -237,11 +239,12 @@ async fn handle_streaming_exec(
         if let Some(p) = port_override { s.port = p; }
         s
     } else {
+        let sys_user = crate::config::get_system_username();
         let (parsed_user, parsed_host) = if target.contains('@') {
             let mut parts = target.split('@');
-            (parts.next().unwrap_or("leonf").to_string(), parts.next().unwrap_or("").to_string())
+            (parts.next().unwrap_or(&sys_user).to_string(), parts.next().unwrap_or("").to_string())
         } else {
-            (user_override.unwrap_or_else(|| "leonf".to_string()), target.to_string())
+            (user_override.unwrap_or(sys_user), target.to_string())
         };
         ServerEntry {
             name: target.to_string(),
@@ -435,12 +438,13 @@ fn handle_interactive_add() {
     let host = host.trim().to_string();
     if host.is_empty() { return; }
 
-    print!("  SSH Benutzer (Standard: leonf): ");
+    let sys_user = crate::config::get_system_username();
+    print!("  SSH Benutzer (Standard: {}): ", sys_user);
     let _ = stdout().flush();
     let mut user = String::new();
     let _ = stdin().read_line(&mut user);
     let user = user.trim();
-    let user = if user.is_empty() { "leonf".to_string() } else { user.to_string() };
+    let user = if user.is_empty() { sys_user } else { user.to_string() };
 
     print!("  SSH Port (Standard: 22): ");
     let _ = stdout().flush();
@@ -870,11 +874,12 @@ async fn handle_connect(target: &str, user_override: Option<String>, port_overri
         s
     } else {
         // Ziel direkt als Host/IP oder user@host parsen
+        let sys_user = crate::config::get_system_username();
         let (parsed_user, parsed_host) = if target.contains('@') {
             let mut parts = target.split('@');
-            (parts.next().unwrap_or("leonf").to_string(), parts.next().unwrap_or("").to_string())
+            (parts.next().unwrap_or(&sys_user).to_string(), parts.next().unwrap_or("").to_string())
         } else {
-            (user_override.unwrap_or_else(|| "leonf".to_string()), target.to_string())
+            (user_override.unwrap_or(sys_user), target.to_string())
         };
 
         ServerEntry {

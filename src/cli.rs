@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
     long_about = "S&B NetGate (sb-ssh) revolutioniert den SSH-Zugriff durch OAuth2/OIDC-Authentifizierung, kurzlebige Ed25519-Sitzungszertifikate und eine interaktive Terminal-UI. 100% autarke Rust-Binary ohne statischen Key-Sprawl."
 )]
 pub struct Cli {
-    /// Optionales Direkt-Ziel (z.B. 'hostinger-prod' oder 'user@host') für Drop-in SSH-Kompatibilität
+    /// Optionales Direkt-Ziel (z.B. 'prod-server' oder 'user@host') für Drop-in SSH-Kompatibilität
     pub target: Option<String>,
 
     /// Auszuführende Remote-Befehle (z.B. bei non-interactive Aufrufen wie git oder rsync)
@@ -82,7 +82,7 @@ pub enum Commands {
 
     /// Verbindet direkt mit einem hinterlegten Server oder einer IP
     Connect {
-        /// Servername aus dem Vault oder Zieladresse (z.B. 'hostinger-prod' oder 'root@145.223.83.235')
+        /// Servername aus dem Vault oder Zieladresse (z.B. 'prod-server' oder 'root@192.168.1.10')
         target: String,
         /// Optionaler SSH-Benutzer
         #[arg(short, long)]
@@ -131,10 +131,10 @@ pub enum Commands {
     Add {
         /// Eindeutiger Name / Alias (z.B. 'prod-web-01')
         name: String,
-        /// Hostname oder IP-Adresse (z.B. '145.223.83.235')
+        /// Hostname oder IP-Adresse (z.B. '192.168.1.10')
         host: String,
-        /// SSH-Benutzername (Standard: 'leonf')
-        #[arg(short, long, default_value = "leonf")]
+        /// SSH-Benutzername (Standard: 'root')
+        #[arg(short, long, default_value = "root")]
         user: String,
         /// SSH-Port (Standard: 22)
         #[arg(short, long, default_value_t = 22)]
@@ -172,7 +172,7 @@ pub enum Commands {
 
     /// Öffnet einen verschlüsselten SSH-Port-Forwarding-Tunnel zum Zielserver
     Tunnel {
-        /// Servername aus dem Tresor oder Zieladresse (z.B. 'hostinger-prod')
+        /// Servername aus dem Tresor oder Zieladresse (z.B. 'prod-server')
         target: String,
         /// Port-Weiterleitung im Format '<local_port>:<remote_port>' (z.B. '8080:80')
         forward: String,
@@ -186,7 +186,7 @@ pub enum Commands {
 
     /// Lädt eine lokale Datei oder ein Verzeichnis auf den Zielserver hoch (Push)
     Push {
-        /// Zielserver aus dem Tresor oder Adresse (z.B. 'hostinger-prod')
+        /// Zielserver aus dem Tresor oder Adresse (z.B. 'prod-server')
         target: String,
         /// Pfad zur lokalen Quelldatei
         local_path: String,
@@ -196,7 +196,7 @@ pub enum Commands {
 
     /// Lädt eine entfernte Datei vom Zielserver herunter (Pull)
     Pull {
-        /// Quellserver aus dem Tresor oder Adresse (z.B. 'hostinger-prod')
+        /// Quellserver aus dem Tresor oder Adresse (z.B. 'prod-server')
         target: String,
         /// Pfad zur entfernten Datei auf dem Server
         remote_path: String,
