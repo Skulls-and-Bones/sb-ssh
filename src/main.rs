@@ -34,10 +34,13 @@ async fn main() {
 
     match cli.command {
         None => {
-            handle_interactive_selector().await;
+            handle_tui().await;
         }
         Some(Commands::Tui) => {
             handle_tui().await;
+        }
+        Some(Commands::Menu) => {
+            handle_interactive_selector().await;
         }
         Some(Commands::Connect { target, user, port }) => {
             handle_connect(&target, user, port).await;
@@ -222,22 +225,22 @@ async fn handle_interactive_selector() {
         }
 
         if choice.eq_ignore_ascii_case("u") || choice.eq_ignore_ascii_case("tunnel") {
-            handle_interactive_tunnel().await;
+            handle_interactive_tunnel(None).await;
             continue;
         }
 
         if choice.eq_ignore_ascii_case("i") || choice.eq_ignore_ascii_case("info") {
-            handle_interactive_info().await;
+            handle_interactive_info(None).await;
             continue;
         }
 
         if choice.eq_ignore_ascii_case("p") || choice.eq_ignore_ascii_case("transfer") || choice.eq_ignore_ascii_case("scp") {
-            handle_interactive_transfer().await;
+            handle_interactive_transfer(None).await;
             continue;
         }
 
         if choice.eq_ignore_ascii_case("x") || choice.eq_ignore_ascii_case("exec") {
-            handle_interactive_exec().await;
+            handle_interactive_exec(None).await;
             continue;
         }
 
@@ -265,7 +268,7 @@ async fn handle_interactive_selector() {
         }
 
         if choice.eq_ignore_ascii_case("e") || choice.eq_ignore_ascii_case("edit") {
-            handle_interactive_edit();
+            handle_interactive_edit(None);
             continue;
         }
 
@@ -399,7 +402,7 @@ fn handle_interactive_delete() {
     }
 }
 
-fn handle_interactive_edit() {
+fn handle_interactive_edit(preset: Option<&str>) {
     let vault = load_vault();
     if vault.servers.is_empty() {
         println!("  {} Keine Server zum Bearbeiten vorhanden.", "!".bright_yellow());
@@ -407,23 +410,27 @@ fn handle_interactive_edit() {
     }
 
     println!("\n{}", "── SERVER BEARBEITEN ──".bright_cyan());
-    print!("  Welchen Server möchtest du bearbeiten? [1-{}, Name oder Enter zum Abbrechen]: ", vault.servers.len());
-    let _ = stdout().flush();
-
-    let mut input = String::new();
-    if stdin().read_line(&mut input).is_err() { return; }
-    let choice = input.trim();
-    if choice.is_empty() { return; }
-
-    let target = if let Ok(num) = choice.parse::<usize>() {
-        if num >= 1 && num <= vault.servers.len() {
-            vault.servers.get(num - 1).cloned()
-        } else {
-            eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
-            return;
-        }
+    let target = if let Some(p) = preset {
+        vault.servers.iter().find(|s| s.name.eq_ignore_ascii_case(p)).cloned()
     } else {
-        vault.servers.iter().find(|s| s.name.eq_ignore_ascii_case(choice)).cloned()
+        print!("  Welchen Server möchtest du bearbeiten? [1-{}, Name oder Enter zum Abbrechen]: ", vault.servers.len());
+        let _ = stdout().flush();
+
+        let mut input = String::new();
+        if stdin().read_line(&mut input).is_err() { return; }
+        let choice = input.trim();
+        if choice.is_empty() { return; }
+
+        if let Ok(num) = choice.parse::<usize>() {
+            if num >= 1 && num <= vault.servers.len() {
+                vault.servers.get(num - 1).cloned()
+            } else {
+                eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
+                return;
+            }
+        } else {
+            vault.servers.iter().find(|s| s.name.eq_ignore_ascii_case(choice)).cloned()
+        }
     };
 
     if let Some(mut srv) = target {
@@ -467,11 +474,11 @@ fn handle_interactive_edit() {
             Err(e) => eprintln!("  {} Fehler: {}\n", "✗".bright_red(), e),
         }
     } else {
-        eprintln!("  {} Server '{}' nicht gefunden.\n", "✗".bright_red(), choice);
+        eprintln!("  {} Server nicht gefunden.\n", "✗".bright_red());
     }
 }
 
-async fn handle_interactive_tunnel() {
+async fn handle_interactive_tunnel(preset: Option<&str>) {
     let vault = load_vault();
     if vault.servers.is_empty() {
         println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
@@ -479,23 +486,27 @@ async fn handle_interactive_tunnel() {
     }
 
     println!("\n{}", "── SSH PORT-FORWARDING TUNNEL ÖFFNEN ──".bright_blue());
-    print!("  Zielserver auswählen [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
-    let _ = stdout().flush();
-    let mut choice = String::new();
-    let _ = stdin().read_line(&mut choice);
-    let choice = choice.trim();
-
-    let target = if choice.is_empty() {
-        vault.servers.first().map(|s| s.name.clone())
-    } else if let Ok(num) = choice.parse::<usize>() {
-        if num >= 1 && num <= vault.servers.len() {
-            vault.servers.get(num - 1).map(|s| s.name.clone())
-        } else {
-            eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
-            return;
-        }
+    let target = if let Some(p) = preset {
+        Some(p.to_string())
     } else {
-        Some(choice.to_string())
+        print!("  Zielserver auswählen [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
+        let _ = stdout().flush();
+        let mut choice = String::new();
+        let _ = stdin().read_line(&mut choice);
+        let choice = choice.trim();
+
+        if choice.is_empty() {
+            vault.servers.first().map(|s| s.name.clone())
+        } else if let Ok(num) = choice.parse::<usize>() {
+            if num >= 1 && num <= vault.servers.len() {
+                vault.servers.get(num - 1).map(|s| s.name.clone())
+            } else {
+                eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
+                return;
+            }
+        } else {
+            Some(choice.to_string())
+        }
     };
 
     if let Some(target_server) = target {
@@ -512,31 +523,35 @@ async fn handle_interactive_tunnel() {
     }
 }
 
-async fn handle_interactive_info() {
+async fn handle_interactive_info(preset: Option<&str>) {
     let vault = load_vault();
     if vault.servers.is_empty() {
         println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
         return;
     }
 
-    println!("\n{}", "── REMOTE SERVER HEALTH PROBE ──".bright_green());
-    print!("  Server für Health-Probe auswählen [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
-    let _ = stdout().flush();
-    let mut choice = String::new();
-    let _ = stdin().read_line(&mut choice);
-    let choice = choice.trim();
-
-    let target = if choice.is_empty() {
-        vault.servers.first().map(|s| s.name.clone())
-    } else if let Ok(num) = choice.parse::<usize>() {
-        if num >= 1 && num <= vault.servers.len() {
-            vault.servers.get(num - 1).map(|s| s.name.clone())
-        } else {
-            eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
-            return;
-        }
+    let target = if let Some(p) = preset {
+        Some(p.to_string())
     } else {
-        Some(choice.to_string())
+        println!("\n{}", "── REMOTE SERVER HEALTH PROBE ──".bright_green());
+        print!("  Server für Health-Probe auswählen [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
+        let _ = stdout().flush();
+        let mut choice = String::new();
+        let _ = stdin().read_line(&mut choice);
+        let choice = choice.trim();
+
+        if choice.is_empty() {
+            vault.servers.first().map(|s| s.name.clone())
+        } else if let Ok(num) = choice.parse::<usize>() {
+            if num >= 1 && num <= vault.servers.len() {
+                vault.servers.get(num - 1).map(|s| s.name.clone())
+            } else {
+                eprintln!("  {} Ungültige Nummer: {}", "✗".bright_red(), num);
+                return;
+            }
+        } else {
+            Some(choice.to_string())
+        }
     };
 
     if let Some(target_server) = target {
@@ -547,14 +562,14 @@ async fn handle_interactive_info() {
     }
 }
 
-async fn handle_interactive_transfer() {
+async fn handle_interactive_transfer(preset: Option<&str>) {
     let vault = load_vault();
     if vault.servers.is_empty() {
         println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
         return;
     }
 
-    println!("\n{}", "── DATEI-TRANSFER (SCP) ──".bright_magenta());
+    println!("\n{}", "── DATEI-TRANSFER (SFTP / SCP) ──".bright_magenta());
     println!("  [1] Upload (Push):   Lokale Datei -> Remote Server");
     println!("  [2] Download (Pull): Remote Datei -> Lokaler Rechner");
     print!("  Aktion wählen [1/2 oder Enter zum Abbrechen]: ");
@@ -564,17 +579,21 @@ async fn handle_interactive_transfer() {
     let act = act.trim();
 
     if act == "1" || act.eq_ignore_ascii_case("push") {
-        print!("  Zielserver [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
-        let _ = stdout().flush();
-        let mut target = String::new();
-        let _ = stdin().read_line(&mut target);
-        let target = target.trim();
-        let target_srv = if target.is_empty() {
-            vault.servers.first().map(|s| s.name.clone())
-        } else if let Ok(num) = target.parse::<usize>() {
-            vault.servers.get(num.saturating_sub(1)).map(|s| s.name.clone())
+        let target_srv = if let Some(p) = preset {
+            Some(p.to_string())
         } else {
-            Some(target.to_string())
+            print!("  Zielserver [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
+            let _ = stdout().flush();
+            let mut target = String::new();
+            let _ = stdin().read_line(&mut target);
+            let target = target.trim();
+            if target.is_empty() {
+                vault.servers.first().map(|s| s.name.clone())
+            } else if let Ok(num) = target.parse::<usize>() {
+                vault.servers.get(num.saturating_sub(1)).map(|s| s.name.clone())
+            } else {
+                Some(target.to_string())
+            }
         };
 
         if let Some(srv_name) = target_srv {
@@ -597,17 +616,21 @@ async fn handle_interactive_transfer() {
             }
         }
     } else if act == "2" || act.eq_ignore_ascii_case("pull") {
-        print!("  Quellserver [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
-        let _ = stdout().flush();
-        let mut target = String::new();
-        let _ = stdin().read_line(&mut target);
-        let target = target.trim();
-        let target_srv = if target.is_empty() {
-            vault.servers.first().map(|s| s.name.clone())
-        } else if let Ok(num) = target.parse::<usize>() {
-            vault.servers.get(num.saturating_sub(1)).map(|s| s.name.clone())
+        let target_srv = if let Some(p) = preset {
+            Some(p.to_string())
         } else {
-            Some(target.to_string())
+            print!("  Quellserver [1-{}, Name oder Enter für Standard [1]]: ", vault.servers.len());
+            let _ = stdout().flush();
+            let mut target = String::new();
+            let _ = stdin().read_line(&mut target);
+            let target = target.trim();
+            if target.is_empty() {
+                vault.servers.first().map(|s| s.name.clone())
+            } else if let Ok(num) = target.parse::<usize>() {
+                vault.servers.get(num.saturating_sub(1)).map(|s| s.name.clone())
+            } else {
+                Some(target.to_string())
+            }
         };
 
         if let Some(srv_name) = target_srv {
@@ -632,7 +655,7 @@ async fn handle_interactive_transfer() {
     }
 }
 
-async fn handle_interactive_exec() {
+async fn handle_interactive_exec(preset: Option<&str>) {
     let vault = load_vault();
     if vault.servers.is_empty() {
         println!("  {} Keine Server im Tresor vorhanden.", "!".bright_yellow());
@@ -640,12 +663,16 @@ async fn handle_interactive_exec() {
     }
 
     println!("\n{}", "── MULTI-SERVER BROADCAST EXECUTION ──".bright_yellow());
-    print!("  Zielgruppe wählen ['all', Tag oder Server-Name] (Standard: 'all'): ");
-    let _ = stdout().flush();
-    let mut target = String::new();
-    let _ = stdin().read_line(&mut target);
-    let target = target.trim();
-    let target_opt = if target.is_empty() || target.eq_ignore_ascii_case("all") { None } else { Some(target) };
+    let target_opt: Option<String> = if let Some(p) = preset {
+        Some(p.to_string())
+    } else {
+        print!("  Zielgruppe wählen ['all', Tag oder Server-Name] (Standard: 'all'): ");
+        let _ = stdout().flush();
+        let mut target = String::new();
+        let _ = stdin().read_line(&mut target);
+        let target = target.trim();
+        if target.is_empty() || target.eq_ignore_ascii_case("all") { None } else { Some(target.to_string()) }
+    };
 
     print!("  Auszuführender Remote-Befehl (z.B. 'uptime' oder 'df -h /'): ");
     let _ = stdout().flush();
@@ -654,7 +681,7 @@ async fn handle_interactive_exec() {
     let cmd_str = cmd_str.trim();
     if cmd_str.is_empty() { return; }
 
-    if let Err(e) = exec::run_broadcast_exec(target_opt, cmd_str, None).await {
+    if let Err(e) = exec::run_broadcast_exec(target_opt.as_deref(), cmd_str, None).await {
         eprintln!("  {} Broadcast-Fehler: {}\n", "✗".bright_red(), e);
     }
 }
@@ -671,25 +698,39 @@ async fn handle_tui() {
             }
             Ok(Some(TuiAction::TriggerLogin)) => {
                 let _ = run_oauth_flow("github").await;
-            }
-            Ok(Some(TuiAction::TriggerAdd)) => {
-                handle_interactive_add();
-            }
-            Ok(Some(TuiAction::TriggerInfo(server))) => {
-                probe::print_server_health(&server.name).await;
                 println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
                 let mut buf = String::new();
                 let _ = std::io::stdin().read_line(&mut buf);
             }
+            Ok(Some(TuiAction::TriggerAdd)) => {
+                handle_interactive_add();
+                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                let mut buf = String::new();
+                let _ = std::io::stdin().read_line(&mut buf);
+            }
+            Ok(Some(TuiAction::TriggerEdit(server))) => {
+                handle_interactive_edit(Some(&server.name));
+                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                let mut buf = String::new();
+                let _ = std::io::stdin().read_line(&mut buf);
+            }
+            Ok(Some(TuiAction::TriggerInfo(server))) => {
+                handle_interactive_info(Some(&server.name)).await;
+            }
             Ok(Some(TuiAction::TriggerTunnel(server))) => {
-                print!("\n  Port-Weiterleitung für '{}' (z.B. '8080:80' oder '5432:5432'): ", server.name.bold());
-                let _ = stdout().flush();
-                let mut forward = String::new();
-                let _ = stdin().read_line(&mut forward);
-                let forward = forward.trim();
-                if !forward.is_empty() {
-                    let _ = tunnel::run_tunnel(&server.name, forward).await;
-                }
+                handle_interactive_tunnel(Some(&server.name)).await;
+                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                let mut buf = String::new();
+                let _ = std::io::stdin().read_line(&mut buf);
+            }
+            Ok(Some(TuiAction::TriggerTransfer(server))) => {
+                handle_interactive_transfer(Some(&server.name)).await;
+                println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
+                let mut buf = String::new();
+                let _ = std::io::stdin().read_line(&mut buf);
+            }
+            Ok(Some(TuiAction::TriggerExec(server))) => {
+                handle_interactive_exec(Some(&server.name)).await;
                 println!("\nDrücke [ENTER] um zur TUI zurückzukehren...");
                 let mut buf = String::new();
                 let _ = std::io::stdin().read_line(&mut buf);

@@ -21,6 +21,9 @@ pub enum Commands {
     /// Startet die interaktive Terminal-Oberfläche (Standard bei Aufruf ohne Parameter)
     Tui,
 
+    /// Startet das klassische zeilenbasierte Konsolen-Auswahlmenü
+    Menu,
+
     /// Verbindet direkt mit einem hinterlegten Server oder einer IP
     Connect {
         /// Servername aus dem Vault oder Zieladresse (z.B. 'hostinger-prod' oder 'root@145.223.83.235')
