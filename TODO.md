@@ -126,30 +126,24 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 
 ---
 
-### Phase 7: Revisionssicheres Session-Audit & Recording (Status: ⚪ Konzeption)
-- [ ] **Compliance nach BSI IT-Grundschutz (OPS.1.1.4 & DER.1):**
-  - Lokales, unveränderbares Audit-Protokoll in `~/.sb-ssh/audit/`.
-  - Protokolliert: Zeitstempel, OAuth-Identität, Ziel-IP, Session-Dauer und Zertifikats-Fingerprint.
-- [ ] **Optionales Terminal Session Recording:**
-  - Aufzeichnung im standardisierten Asciinema- / Cast-Format (`sb-ssh connect --record <server>`).
-  - Offline-Replay zur forensischen Analyse oder für Sicherheitsaudits.
+### Phase 7: Revisionssicheres Session-Audit & Recording (Status: 🟢 Erledigt)
+- [x] **Compliance nach BSI IT-Grundschutz (OPS.1.1.4 & DER.1):**
+  - Lokales, unmanipulierbares Audit-Protokoll in `~/.sb-ssh/audit/sessions.jsonl`.
+  - Protokolliert: Start- & End-Zeitstempel, Session-ID, OAuth-Identität, Ziel-IP & Server-Alias, Session-Dauer, Status und Zertifikats-Serial.
+  - Abfrage über `sb-ssh audit` (formatierte Tabelle) oder `sb-ssh audit --json` für SIEM- / Log-Forwarding.
+- [x] **Optionales Terminal Session Recording (Asciinema v2):**
+  - Aufzeichnung im standardisierten Asciinema-Cast-Format (`sb-ssh connect --record <server>` oder `sb-ssh <server> -r`).
+  - Gespeichert in `~/.sb-ssh/recordings/<session_id>.cast`.
+  - Nativer Offline-Player via `sb-ssh replay <session_id oder datei>` zur forensischen Analyse und für Compliance-Reviews.
 
 ---
 
-### Phase 8: Bastion & Jump-Host-Kaskadierung (Status: ⚪ Konzeption)
-- [ ] **ProxyJump-Unterstützung:**
-  - Konfigurierbarer `jump_host` im Server-Eintrag.
-  - Automatisches Weiterreichen des Ephemeral-Zertifikats über DMZ-Bastion-Hosts in isolierte interne Netze.
-
----
-
-### Phase 9: Team-Vault & Identity-Provider Integration (Status: ⚪ Konzeption)
-- [ ] **Erweiterte Identity Provider:**
-  - Fertige Vorlagen für Authentik, Keycloak, Okta und Google Workspace.
-- [ ] **Rollenbasierte Autorisierung (RBAC):**
-  - Mappen von OIDC-Rollen / Gruppen auf erlaubte SSH-Principals (z. B. Gruppe `ops` -> `root`, Gruppe `dev` -> `developer`).
-- [ ] **Verschlüsselter Vault-Export / Import:**
-  - `sb-ssh export --gpg` zum sicheren Teilen von Server-Konfigurationen im Team.
+### Phase 8: Bastion & Jump-Host-Kaskadierung (Status: 🟢 Erledigt)
+- [x] **100% Pure-Rust ProxyJump (SSH-over-SSH Streaming):**
+  - Konfigurierbarer `jump_host` im Server-Eintrag (`servers.toml`, `sb-ssh add --jump <bastion>`, interaktives Menü).
+  - Automatisches Einlesen von `ProxyJump` aus `~/.ssh/config`.
+  - Kaskadierter Verbindungsaufbau: Öffnet einen sicheren TCP-Kanal über den Bastion-Host (`channel_open_direct_tcpip`) und bindet den Ziel-SSH-Transport direkt in-memory an den Stream (`russh::client::connect_stream`).
+  - Vollständig ohne `ssh.exe` oder externe Subprozesse, mit automatischer Zertifikats-Authentifizierung auf beiden Ebenen.
 
 ---
 
@@ -160,6 +154,10 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 | `sb-ssh` | Öffnet das interaktive Konsolen-Auswahl- & Management-Menü |
 | `sb-ssh tui` | Startet das grafische Vollbild-Terminal-Dashboard (Ratatui) |
 | `sb-ssh connect <name>` | Verbindet nativ im Terminal (100% Pure-Rust PTY, 8h-Cert) |
+| `sb-ssh connect --record <name>` | Verbindet und zeichnet die Terminalsitzung im `.cast`-Format auf |
+| `sb-ssh audit` | Zeigt das revisionssichere BSI IT-Grundschutz Session-Log |
+| `sb-ssh audit --json` | Gibt das Audit-Log als JSON-Lines für SIEM-Forwarding aus |
+| `sb-ssh replay <session/file>` | Spielt eine aufgezeichnete Terminal-Sitzung ab |
 | `sb-ssh tunnel <name> <spec>` | Öffnet einen nativen TCP-Tunnel (`local:remote` z. B. `8080:80`) |
 | `sb-ssh info <name>` | Blitzschnelle Health-Probe (CPU, RAM, Disk, Uptime, Latenz) |
 | `sb-ssh push <name> <local> [rem]` | Lädt Dateien nativ via SFTP auf den Server |
@@ -170,7 +168,7 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 | `sb-ssh login` | Startet den OAuth2 PKCE Browser-Login |
 | `sb-ssh login --dev <user>` | Lokaler Entwickler-Login ohne externen IdP |
 | `sb-ssh logout` | Löscht den lokalen OAuth-Token und beendet die Sitzung |
-| `sb-ssh add <name> <ip>` | Fügt einen neuen Server zum Tresor hinzu |
+| `sb-ssh add <name> <ip> [-j bastion]` | Fügt einen neuen Server zum Tresor hinzu (optional mit Bastion) |
 | `sb-ssh remove <name>` | Entfernt einen Server dauerhaft aus dem Tresor |
 | `sb-ssh cert -H <hours>` | Manuelle Erstellung eines signierten OpenSSH-Zertifikats |
 | `sb-ssh server-init` | Gibt die 1-Zeilen-Kommandos zur CA-Einrichtung auf Zielservern aus |

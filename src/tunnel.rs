@@ -62,6 +62,7 @@ pub async fn run_tunnel(target_query: &str, forward_arg: &str) -> Result<(), Str
             identity_file: None,
             description: Some("Ad-hoc Tunnel".to_string()),
             last_connected: None,
+            jump_host: None,
         }
     };
 

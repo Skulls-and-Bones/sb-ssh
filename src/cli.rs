@@ -12,6 +12,10 @@ pub struct Cli {
     /// Optionales Direkt-Ziel (z.B. 'hostinger-prod' oder 'user@host') für Drop-in SSH-Kompatibilität
     pub target: Option<String>,
 
+    /// Session im Asciinema v2 (.cast) Format aufzeichnen
+    #[arg(short, long)]
+    pub record: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -34,6 +38,25 @@ pub enum Commands {
         /// Optionaler SSH-Port
         #[arg(short, long)]
         port: Option<u16>,
+        /// Terminal-Sitzung revisionssicher aufzeichnen (.cast Format)
+        #[arg(short, long)]
+        record: bool,
+    },
+
+    /// Zeigt das BSI IT-Grundschutz konforme Session-Audit-Protokoll
+    Audit {
+        /// Maximale Anzahl anzuzeigender Einträge (Standard: 20)
+        #[arg(short, long, default_value_t = 20)]
+        limit: usize,
+        /// Ausgabe als unformatierte JSON-Lines (für SIEM / Log-Forwarding)
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Spielt eine aufgezeichnete Terminal-Sitzung ab (.cast Datei oder Session-ID)
+    Replay {
+        /// Dateipfad oder Session-ID der Aufzeichnung
+        target: String,
     },
 
     /// Startet die OAuth2 / OIDC Browser-Authentifizierung
@@ -70,6 +93,9 @@ pub enum Commands {
         /// Beschreibung
         #[arg(short, long)]
         desc: Option<String>,
+        /// Optionaler Bastion- / Jump-Host aus dem Tresor
+        #[arg(short, long)]
+        jump: Option<String>,
     },
 
     /// Listet alle gespeicherten Server auf

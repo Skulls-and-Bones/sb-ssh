@@ -24,6 +24,6 @@ pub fn check_server_latency(host: &str, port: u16) -> Option<Duration> {
     }
 }
 
-pub async fn run_ssh_session(server: &ServerEntry, session: Option<&UserSession>) -> Result<(), String> {
-    crate::native_ssh::run_interactive_shell(server, session).await
+pub async fn run_ssh_session(server: &ServerEntry, session: Option<&UserSession>, record: bool) -> Result<(), String> {
+    crate::native_ssh::run_interactive_shell(server, session, record).await
 }

@@ -43,6 +43,7 @@ pub async fn push_file(target_query: &str, local_path_str: &str, remote_path_opt
             identity_file: None,
             description: Some("Ad-hoc Transfer".to_string()),
             last_connected: None,
+            jump_host: None,
         }
     };
 
@@ -148,6 +149,7 @@ pub async fn pull_file(target_query: &str, remote_path_str: &str, local_path_opt
             identity_file: None,
             description: Some("Ad-hoc Transfer".to_string()),
             last_connected: None,
+            jump_host: None,
         }
     };
 

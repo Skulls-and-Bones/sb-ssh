@@ -26,7 +26,7 @@ impl Handler for ClientHandler {
     }
 }
 
-/// Stellt eine authentifizierte native SSH2-Sitzung zum Zielserver her.
+/// Stellt eine authentifizierte native SSH2-Sitzung zum Zielserver her (direkt oder kaskadiert via Bastion).
 pub async fn connect_and_auth(
     server: &ServerEntry,
     session: Option<&UserSession>,
@@ -45,11 +45,44 @@ pub async fn connect_and_auth(
         ..Default::default()
     });
 
-    // 3. TCP-Verbindung herstellen
-    let addr = format!("{}:{}", server.host, server.port);
-    let mut handle = russh::client::connect(config, addr.as_str(), ClientHandler)
-        .await
-        .map_err(|e| format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))?;
+    // 3. TCP-Verbindung herstellen (Direkt oder kaskadiert über Jump-Host)
+    let mut handle = if let Some(ref jump_name) = server.jump_host {
+        let vault = crate::vault::load_vault();
+        let jump_server = if let Some(found) = crate::vault::find_server(&vault, jump_name) {
+            found.clone()
+        } else {
+            ServerEntry {
+                name: jump_name.clone(),
+                host: jump_name.clone(),
+                port: 22,
+                user: server.user.clone(),
+                tags: vec!["bastion".to_string()],
+                identity_file: server.identity_file.clone(),
+                description: Some("Ad-hoc Bastion Host".to_string()),
+                last_connected: None,
+                jump_host: None,
+            }
+        };
+
+        println!("  {} Kaskadiere über Bastion-Host '{}' ({}:{})...", "►".bright_cyan(), jump_server.name.bold(), jump_server.host, jump_server.port);
+        let jump_handle = Box::pin(connect_and_auth(&jump_server, session)).await
+            .map_err(|e| format!("Bastion-Verbindung fehlgeschlagen: {}", e))?;
+
+        let channel = jump_handle
+            .channel_open_direct_tcpip(&server.host, server.port as u32, "127.0.0.1", 0)
+            .await
+            .map_err(|e| format!("Konnte Tunnel-Kanal auf Bastion nicht öffnen: {}", e))?;
+
+        let stream = channel.into_stream();
+        russh::client::connect_stream(config, stream, ClientHandler)
+            .await
+            .map_err(|e| format!("SSH2-Handshake über Bastion fehlgeschlagen: {}", e))?
+    } else {
+        let addr = format!("{}:{}", server.host, server.port);
+        russh::client::connect(config, addr.as_str(), ClientHandler)
+            .await
+            .map_err(|e| format!("Verbindung zu {} fehlgeschlagen: {}", addr, e))?
+    };
 
     // 4. Zertifikat und ephemeren Key einlesen
     let priv_str = std::fs::read_to_string(&bundle.private_key_path)
@@ -129,7 +162,11 @@ impl Drop for RawModeGuard {
 pub async fn run_interactive_shell(
     server: &ServerEntry,
     session: Option<&UserSession>,
+    record: bool,
 ) -> Result<(), String> {
+    let session_id = crate::audit::new_session_id();
+    let rec_file_opt = if record { Some(format!("{}.cast", session_id)) } else { None };
+
     println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
     println!(
         "  {} {} {}",
@@ -141,16 +178,42 @@ pub async fn run_interactive_shell(
 
     let username = session.map(|s| s.username.as_str()).unwrap_or("leonf");
     println!("  {} Ziel:       {}@{}:{}", "►".bright_cyan(), server.user.bright_yellow(), server.host.bright_white(), server.port);
+    if let Some(ref jh) = server.jump_host {
+        println!("  {} Bastion:    {}", "►".bright_cyan(), jh.bright_magenta());
+    }
     println!("  {} Identität:  {}", "►".bright_cyan(), username.bright_green());
     println!("  {} Transport:  {}", "►".bright_cyan(), "Autarker Pure-Rust SSH2 Client (russh)".bright_magenta());
 
-    let handle = connect_and_auth(server, session).await?;
+    let audit_entry = crate::audit::log_session_start(
+        &session_id,
+        username,
+        &server.name,
+        &server.host,
+        server.port,
+        &server.user,
+        "Ephemeral Ed25519 Cert",
+        None,
+        server.jump_host.as_deref(),
+        rec_file_opt.as_deref(),
+    );
+
+    let handle = match connect_and_auth(server, session).await {
+        Ok(h) => h,
+        Err(e) => {
+            crate::audit::log_session_end(audit_entry, "AuthFailed");
+            return Err(e);
+        }
+    };
+
     println!("  {} Authentifizierung erfolgreich (OpenSSH Ed25519-Cert)", "✓".bright_green());
 
     let mut channel = handle
         .channel_open_session()
         .await
-        .map_err(|e| format!("Fehler beim Öffnen des SSH-Kanals: {}", e))?;
+        .map_err(|e| {
+            crate::audit::log_session_end(audit_entry.clone(), "ChannelFailed");
+            format!("Fehler beim Öffnen des SSH-Kanals: {}", e)
+        })?;
 
     // Terminalgröße abfragen
     let (mut cols, mut rows) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -163,6 +226,21 @@ pub async fn run_interactive_shell(
         .request_shell(true)
         .await
         .map_err(|e| format!("Shell-Anforderung fehlgeschlagen: {}", e))?;
+
+    let mut recorder = if record {
+        match crate::recorder::SessionRecorder::new(&session_id, &format!("Session to {}", server.name), cols, rows) {
+            Ok(rec) => {
+                println!("  {} Session-Recording aktiv: ~/.sb-ssh/recordings/{}.cast", "●".bright_magenta(), session_id);
+                Some(rec)
+            }
+            Err(e) => {
+                eprintln!("  {} Recording-Warnung: {}", "!".bright_yellow(), e);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     println!("  {} Terminal PTY alloziiert. Wechsle in Raw-Modus...\n", "►".bright_cyan());
 
@@ -207,10 +285,16 @@ pub async fn run_interactive_shell(
                     Some(russh::ChannelMsg::Data { data }) => {
                         let _ = stdout.write_all(&data).await;
                         let _ = stdout.flush().await;
+                        if let Some(ref mut rec) = recorder {
+                            rec.record_output(&data);
+                        }
                     }
                     Some(russh::ChannelMsg::ExtendedData { data, .. }) => {
                         let _ = stdout.write_all(&data).await;
                         let _ = stdout.flush().await;
+                        if let Some(ref mut rec) = recorder {
+                            rec.record_output(&data);
+                        }
                     }
                     Some(russh::ChannelMsg::ExitStatus { .. }) => {
                         // Remote-Prozess beendet
@@ -236,8 +320,14 @@ pub async fn run_interactive_shell(
     drop(_guard);
     drop(stdin_handle);
 
+    crate::audit::log_session_end(audit_entry, "Disconnected");
+
     println!("\n{}", "══════════════════════════════════════════════════════════════════".bright_black());
     println!("  {} Native SSH-Sitzung sauber beendet.", "✓".bright_green());
+    if recorder.is_some() {
+        println!("  {} Aufzeichnung gespeichert in: ~/.sb-ssh/recordings/{}.cast", "✓".bright_magenta(), session_id);
+        println!("  {} Abspielen mit: sb-ssh replay {}", "i".bright_blue(), session_id);
+    }
     println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
 
     Ok(())

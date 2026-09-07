@@ -10,6 +10,8 @@ mod probe;
 mod transfer;
 mod exec;
 mod native_ssh;
+mod audit;
+mod recorder;
 
 use std::io::{stdin, stdout, Write};
 use clap::Parser;
@@ -28,7 +30,7 @@ async fn main() {
 
     // Direktverbindung wenn ein Ziel übergeben wurde (Drop-in ssh replacement)
     if let Some(target) = cli.target {
-        handle_connect(&target, None, None).await;
+        handle_connect(&target, None, None, cli.record).await;
         return;
     }
 
@@ -42,8 +44,16 @@ async fn main() {
         Some(Commands::Menu) => {
             handle_interactive_selector().await;
         }
-        Some(Commands::Connect { target, user, port }) => {
-            handle_connect(&target, user, port).await;
+        Some(Commands::Connect { target, user, port, record }) => {
+            handle_connect(&target, user, port, record || cli.record).await;
+        }
+        Some(Commands::Audit { limit, json }) => {
+            audit::print_audit_table(limit, json);
+        }
+        Some(Commands::Replay { target }) => {
+            if let Err(e) = recorder::replay_session(&target).await {
+                eprintln!("  {} Replay-Fehler: {}", "✗".bright_red(), e);
+            }
         }
         Some(Commands::Login { provider, dev }) => {
             if let Some(dev_user) = dev {
@@ -70,7 +80,7 @@ async fn main() {
         Some(Commands::Status) => {
             handle_status();
         }
-        Some(Commands::Add { name, host, user, port, tags, desc }) => {
+        Some(Commands::Add { name, host, user, port, tags, desc, jump }) => {
             let tags_vec = tags
                 .map(|t| t.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
                 .unwrap_or_default();
@@ -84,6 +94,7 @@ async fn main() {
                 identity_file: None,
                 description: desc,
                 last_connected: None,
+                jump_host: jump,
             };
 
             match add_server(entry) {
@@ -289,7 +300,7 @@ async fn handle_interactive_selector() {
 
         if let Some(target) = selected_server {
             println!("\n  {} Starte Verbindung zu '{}'...", "►".bright_cyan(), target.name.bold());
-            let _ = run_ssh_session(&target, session.as_ref()).await;
+            let _ = run_ssh_session(&target, session.as_ref(), false).await;
             println!("\nDrücke [ENTER] um zur Serverliste zurückzukehren...");
             let mut _b = String::new();
             let _ = stdin().read_line(&mut _b);
@@ -329,6 +340,15 @@ fn handle_interactive_add() {
     let _ = stdin().read_line(&mut port_str);
     let port = port_str.trim().parse::<u16>().unwrap_or(22);
 
+    print!("  Bastion / Jump-Host (optional, Alias aus Tresor): ");
+    let _ = stdout().flush();
+    let mut jump_str = String::new();
+    let _ = stdin().read_line(&mut jump_str);
+    let jump_host = {
+        let trimmed = jump_str.trim();
+        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+    };
+
     print!("  Tags (kommagetrennt, z.B. prod, vps): ");
     let _ = stdout().flush();
     let mut tags_str = String::new();
@@ -348,6 +368,7 @@ fn handle_interactive_add() {
         identity_file: None,
         description: Some("Manuell hinzugefügt".to_string()),
         last_connected: None,
+        jump_host,
     };
 
     match add_server(entry) {
@@ -467,6 +488,19 @@ fn handle_interactive_edit(preset: Option<&str>) {
         let _ = stdin().read_line(&mut buf);
         if !buf.trim().is_empty() {
             srv.tags = buf.trim().split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        }
+
+        print!("  Bastion / Jump-Host [{}]: ", srv.jump_host.as_deref().unwrap_or("keiner").bold());
+        let _ = stdout().flush();
+        buf.clear();
+        let _ = stdin().read_line(&mut buf);
+        let trimmed_jump = buf.trim();
+        if !trimmed_jump.is_empty() {
+            if trimmed_jump.eq_ignore_ascii_case("none") || trimmed_jump.eq_ignore_ascii_case("-") {
+                srv.jump_host = None;
+            } else {
+                srv.jump_host = Some(trimmed_jump.to_string());
+            }
         }
 
         match crate::vault::update_server(&old_name, srv) {
@@ -691,7 +725,7 @@ async fn handle_tui() {
         match run_tui() {
             Ok(Some(TuiAction::Connect(server))) => {
                 let session = load_session();
-                let _ = run_ssh_session(&server, session.as_ref()).await;
+                let _ = run_ssh_session(&server, session.as_ref(), false).await;
                 println!("\nDrücke [ENTER] um zur Serverliste zurückzukehren...");
                 let mut buf = String::new();
                 let _ = std::io::stdin().read_line(&mut buf);
@@ -717,7 +751,7 @@ async fn handle_tui() {
     }
 }
 
-async fn handle_connect(target: &str, user_override: Option<String>, port_override: Option<u16>) {
+async fn handle_connect(target: &str, user_override: Option<String>, port_override: Option<u16>, record: bool) {
     let vault = load_vault();
     let session = load_session();
 
@@ -744,10 +778,11 @@ async fn handle_connect(target: &str, user_override: Option<String>, port_overri
             identity_file: None,
             description: Some("Ad-hoc Verbindung".to_string()),
             last_connected: None,
+            jump_host: None,
         }
     };
 
-    if let Err(e) = run_ssh_session(&server, session.as_ref()).await {
+    if let Err(e) = run_ssh_session(&server, session.as_ref(), record).await {
         eprintln!("  {} Verbindungsfehler: {}", "✗".bright_red(), e);
     }
 }

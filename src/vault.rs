@@ -13,6 +13,8 @@ pub struct ServerEntry {
     pub identity_file: Option<String>,
     pub description: Option<String>,
     pub last_connected: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default)]
+    pub jump_host: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -50,6 +52,7 @@ pub fn load_vault() -> ServerVault {
             identity_file: None,
             description: Some("Hostinger Production VPS (skulls-and-bones.org)".to_string()),
             last_connected: None,
+            jump_host: None,
         });
         let _ = save_vault(&vault);
     }
@@ -81,13 +84,15 @@ pub fn sync_ssh_config_servers(vault: &mut ServerVault) -> bool {
     let mut current_user: Option<String> = None;
     let mut current_port: u16 = 22;
     let mut current_identity: Option<String> = None;
+    let mut current_jump: Option<String> = None;
 
     let flush = |v: &mut ServerVault,
                  h: &Option<String>,
                  hn: &Option<String>,
                  u: &Option<String>,
                  p: u16,
-                 idf: &Option<String>| -> bool {
+                 idf: &Option<String>,
+                 jh: &Option<String>| -> bool {
         if let Some(name) = h {
             if name == "*" || name.contains('?') || name.contains(' ') {
                 return false;
@@ -108,6 +113,7 @@ pub fn sync_ssh_config_servers(vault: &mut ServerVault) -> bool {
                     identity_file: idf.clone(),
                     description: Some("Importiert aus ~/.ssh/config".to_string()),
                     last_connected: None,
+                    jump_host: jh.clone(),
                 });
                 return true;
             }
@@ -127,7 +133,7 @@ pub fn sync_ssh_config_servers(vault: &mut ServerVault) -> bool {
 
         match key.as_str() {
             "host" => {
-                if flush(vault, &current_host, &current_hostname, &current_user, current_port, &current_identity) {
+                if flush(vault, &current_host, &current_hostname, &current_user, current_port, &current_identity, &current_jump) {
                     added_any = true;
                 }
                 current_host = Some(val);
@@ -135,6 +141,7 @@ pub fn sync_ssh_config_servers(vault: &mut ServerVault) -> bool {
                 current_user = None;
                 current_port = 22;
                 current_identity = None;
+                current_jump = None;
             }
             "hostname" => {
                 current_hostname = Some(val);
@@ -150,11 +157,14 @@ pub fn sync_ssh_config_servers(vault: &mut ServerVault) -> bool {
             "identityfile" => {
                 current_identity = Some(val);
             }
+            "proxyjump" => {
+                current_jump = Some(val);
+            }
             _ => {}
         }
     }
 
-    if flush(vault, &current_host, &current_hostname, &current_user, current_port, &current_identity) {
+    if flush(vault, &current_host, &current_hostname, &current_user, current_port, &current_identity, &current_jump) {
         added_any = true;
     }
 

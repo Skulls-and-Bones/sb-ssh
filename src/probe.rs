@@ -44,6 +44,7 @@ pub async fn fetch_server_health(target_query: &str) -> Result<ServerHealthStats
             identity_file: None,
             description: Some("Ad-hoc Health Check".to_string()),
             last_connected: None,
+            jump_host: None,
         }
     };
 
