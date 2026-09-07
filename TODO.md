@@ -51,12 +51,14 @@ Zusammen mit integrierter Live-Latenzmessung, interaktiver TUI, 1-Click Server-M
 - [x] **Nummeriertes Schnell-Auswahlmenü (`sb-ssh`):**
   - Schnellauswahl mit `[1]`, `[2]`, ... oder direkter Druck auf `[Enter]` für den Standardserver.
   - Befehlsleiste: `[+] Hinzufügen`, `[-] Löschen`, `[e] Bearbeiten`, `[r] Neu messen`, `[t] TUI`, `[q] Beenden`.
-- [x] **Vollbild Ratatui TUI Dashboard (`sb-ssh tui`):**
-  - Taktisches Dark-Theme Interface mit Server-Tabelle und OAuth-Statusleiste.
-  - Pfeiltastennavigation (`↑` / `↓`) und Hotkeys.
-  - **Buffer-Drain Fix:** Entleeren des Windows-Konsolenpuffers beim Start gegen ungewolltes Auto-Connect.
-  - **Sicherheits-Löschdialog (`[D]` / `[Entf]`):** Roter Bestätigungsbalken vor dem Entfernen von Servern.
-  - Schneller Refresh (`[R]`), Login-Trigger (`[L]`) und Hinzufügen (`[+]`).
+- [x] **Vollbild Ratatui TUI Dashboard (`sb-ssh` / `sb-ssh tui`):**
+  - **Master-Detail Split-Layout:** Linkes Flotten-Panel (Tabelle mit Status, Tags, Latenz) + Rechtes Inspektoren-Panel (Telemetrie, 15-Bar Signal-Balken, Auth-Info, Schnellaktionen).
+  - **Echtzeit Live-Filter (`/`):** Schnellsuche mit instantan filternden Server-Einträgen und Cursor.
+  - **Zentrierte Dialog-Modale (Overlays):**
+    - Sicherheits-Löschdialog (`[D]`) mit roter Doppelumrahmung.
+    - Hilfe-Dialog (`[?]` / `F1`) mit kompletter Tastaturbefehls-Referenz.
+  - **1-Klick Aktionen:** `[Enter]` Verbinden, `[I]` Info, `[U]` Tunnel, `[P]` SFTP, `[X]` Exec, `[E]` Edit, `[+]` Add, `[R]` Ping, `[Q]` Beenden.
+  - **Buffer-Drain Fix:** Entleeren des Konsolenpuffers beim Start gegen ungewolltes Auto-Connect.
 
 ---
 
