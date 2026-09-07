@@ -6,7 +6,8 @@ use clap::{Parser, Subcommand};
     author = "Skulls & Bones Lab <dev@skulls-and-bones.org>",
     version = "0.1.0",
     about = "S&B NetGate — Modern OAuth-Secured SSH CLI with Ephemeral Certificates & TUI",
-    long_about = "S&B NetGate (sb-ssh) revolutioniert den SSH-Zugriff durch OAuth2/OIDC-Authentifizierung, kurzlebige Ed25519-Sitzungszertifikate und eine interaktive Terminal-UI. 100% autarke Rust-Binary ohne statischen Key-Sprawl."
+    long_about = "S&B NetGate (sb-ssh) revolutioniert den SSH-Zugriff durch OAuth2/OIDC-Authentifizierung, kurzlebige Ed25519-Sitzungszertifikate und eine interaktive Terminal-UI. 100% autarke Rust-Binary ohne statischen Key-Sprawl.",
+    disable_help_subcommand = true
 )]
 pub struct Cli {
     /// Optionales Direkt-Ziel (z.B. 'prod-server' oder 'user@host') für Drop-in SSH-Kompatibilität
@@ -233,5 +234,11 @@ pub enum Commands {
         /// Ziel-Shell für die Autovervollständigung
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+    },
+
+    /// Zeigt eine ausführliche taktische Befehlsübersicht & Cheatsheet
+    Help {
+        /// Optionales Thema oder Subcommand (z.B. 'socks5', 'audit', 'tunnel', 'certs', 'sftp')
+        topic: Option<String>,
     },
 }

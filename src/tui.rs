@@ -31,6 +31,7 @@ pub struct TuiApp {
     pub table_state: TableState,
     pub latencies: Vec<Option<Duration>>,
     pub confirm_delete: bool,
+    pub show_help: bool,
 }
 
 impl TuiApp {
@@ -53,6 +54,7 @@ impl TuiApp {
             table_state,
             latencies,
             confirm_delete: false,
+            show_help: false,
         }
     }
 
@@ -132,6 +134,12 @@ fn run_loop(
                     continue;
                 }
 
+                // Hilfe-Modal schließen bei beliebigem Tastendruck
+                if app.show_help {
+                    app.show_help = false;
+                    continue;
+                }
+
                 // Delete-Bestätigungsdialog
                 if app.confirm_delete {
                     match key.code {
@@ -153,6 +161,7 @@ fn run_loop(
 
                 // Standard-Tasten
                 match key.code {
+                    KeyCode::Char('?') | KeyCode::Char('h') => app.show_help = true,
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(Some(TuiAction::Quit)),
                     KeyCode::Down | KeyCode::Char('j') => app.next(),
                     KeyCode::Up | KeyCode::Char('k') => app.previous(),
@@ -291,13 +300,15 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
     // ── 3. FOOTER ──────────────────────────────────────────────────
     let footer_spans = vec![
         Span::styled(" [ENTER] ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::styled(" Verbinden    ", Style::default().fg(Color::White)),
+        Span::styled(" Verbinden   ", Style::default().fg(Color::White)),
         Span::styled(" [+] ", Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)),
-        Span::styled(" Hinzufügen    ", Style::default().fg(Color::White)),
+        Span::styled(" Neu   ", Style::default().fg(Color::White)),
         Span::styled(" [D] ", Style::default().fg(Color::Black).bg(Color::Red).add_modifier(Modifier::BOLD)),
-        Span::styled(" Löschen    ", Style::default().fg(Color::White)),
+        Span::styled(" Löschen   ", Style::default().fg(Color::White)),
         Span::styled(" [R] ", Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::styled(" Ping    ", Style::default().fg(Color::White)),
+        Span::styled(" Ping   ", Style::default().fg(Color::White)),
+        Span::styled(" [?] ", Style::default().fg(Color::Black).bg(Color::LightCyan).add_modifier(Modifier::BOLD)),
+        Span::styled(" Hilfe   ", Style::default().fg(Color::White)),
         Span::styled(" [Q] ", Style::default().fg(Color::Black).bg(Color::DarkGray).add_modifier(Modifier::BOLD)),
         Span::styled(" Beenden", Style::default().fg(Color::White)),
     ];
@@ -340,6 +351,68 @@ fn ui(f: &mut Frame, app: &mut TuiApp) {
                 .border_style(Style::default().fg(Color::Red)),
         );
         f.render_widget(delete_box, delete_area);
+    }
+
+    // ── 5. HILFE-DIALOG ─────────────────────────────────────────────
+    if app.show_help {
+        let help_area = centered_rect(68, 16, f.area());
+        f.render_widget(Clear, help_area);
+
+        let help_lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  [ENTER]         ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("Verbindung zum ausgewählten Server herstellen", Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [+] oder [A]    ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled("Neuen Server interaktiv zum Tresor hinzufügen", Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [D] oder [X]    ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                Span::styled("Ausgewählten Server mit Sicherheitsabfrage löschen", Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [R]             ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled("Ping-Latenzen aller Server live neu messen", Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [L]             ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+                Span::styled("OAuth2 / OIDC Browser-Login ausführen", Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [↑ / ↓ / j / k] ", Style::default().fg(Color::Cyan)),
+                Span::styled("Server-Auswahl in der Tabelle bewegen", Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [?] oder [H]    ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled("Dieses Hilfe-Fenster ein- / ausblenden", Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [Q] oder [ESC]  ", Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+                Span::styled("TUI beenden / Dialog schließen", Style::default().fg(Color::White)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  ► Vollständiges CLI-Cheatsheet: ", Style::default().fg(Color::Cyan)),
+                Span::styled("Führe ", Style::default().fg(Color::DarkGray)),
+                Span::styled("sb-ssh help", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(" im Terminal aus.", Style::default().fg(Color::DarkGray)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("            [ Beliebige Taste drücken zum Schließen ]", Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+            ]),
+        ];
+
+        let help_box = Paragraph::new(help_lines).block(
+            Block::default()
+                .title(" 💡 S&B NETGATE // TASTENKÜRZEL & HILFE ")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Double)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
+        f.render_widget(help_box, help_area);
     }
 }
 

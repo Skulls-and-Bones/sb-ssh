@@ -87,6 +87,7 @@ sb-ssh tui
 * `[+]`: Server zum Tresor hinzufügen
 * `[D]`: Server mit Sicherheitsdialog löschen
 * `[R]`: Latenzen neu messen
+* `[?]`: Hilfe & Tastenübersicht einblenden
 * `[Q]`: Beenden
 
 ---
@@ -198,6 +199,7 @@ Folge den zwei angezeigten Befehlen (Public Key hinterlegen & `sshd_config` anpa
 | `sb-ssh cert` | `[-H hours]` | Manuelle Erstellung eines signierten Zertifikats |
 | `sb-ssh server-init`| — | Gibt die 1-Klick Anleitung für Zielserver aus |
 | `sb-ssh completions`| `<shell>` | Generiert Shell-Completions (powershell, bash, zsh, fish) |
+| `sb-ssh help` | `[topic]` | Taktisches Cheatsheet & Hilfeseite für alle Funktionen |
 
 ---
 

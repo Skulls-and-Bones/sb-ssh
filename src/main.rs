@@ -185,6 +185,9 @@ async fn main() {
         Some(Commands::Completions { shell }) => {
             handle_completions(shell);
         }
+        Some(Commands::Help { topic }) => {
+            handle_help(topic.as_deref());
+        }
     }
 }
 
@@ -315,7 +318,7 @@ async fn handle_interactive_selector() {
 
         println!("{}", "══════════════════════════════════════════════════════════════════════════════════════".bright_black());
         println!(
-            "  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}\n  {} {}   {} {}",
+            "  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}\n  {} {}   {} {}   {} {}",
             "[1-N / Enter]".bright_yellow().bold(), "Verbinden",
             "[+]".bright_cyan().bold(), "Server hinzufügen",
             "[-]".bright_red().bold(), "Server löschen",
@@ -326,6 +329,7 @@ async fn handle_interactive_selector() {
             "[x]".bright_yellow().bold(), "Broadcast (Exec)",
             "[r]".bright_yellow().bold(), "Neu messen",
             "[t]".bright_cyan().bold(), "Vollbild-TUI",
+            "[?]".bright_cyan().bold(), "Hilfe & Cheatsheet",
             "[q]".bright_black().bold(), "Beenden"
         );
         print!("\n  {} Befehl oder Server wählen [1-{}, Name oder Aktion] (Standard: [1]): ", "►".bright_cyan(), vault.servers.len().max(1));
@@ -340,6 +344,14 @@ async fn handle_interactive_selector() {
         if choice.eq_ignore_ascii_case("q") || choice.eq_ignore_ascii_case("exit") {
             println!("  Auf Wiedersehen!");
             break;
+        }
+
+        if choice == "?" || choice.eq_ignore_ascii_case("help") || choice.eq_ignore_ascii_case("hilfe") {
+            handle_help(None);
+            println!("\n  Drücke [ENTER] um zum Menü zurückzukehren...");
+            let mut _b = String::new();
+            let _ = std::io::stdin().read_line(&mut _b);
+            continue;
         }
 
         if choice.eq_ignore_ascii_case("r") || choice.eq_ignore_ascii_case("refresh") {
@@ -989,4 +1001,168 @@ fn handle_server_init() {
     println!("  Danach benötigt kein Benutzer mehr statische Keys in ~/.ssh/authorized_keys.");
     println!("  Jeder Zugriff wird über den OAuth-Token und das 8h-Zertifikat autorisiert.\n");
     println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+}
+
+pub fn handle_help(topic: Option<&str>) {
+    let t = topic.map(|s| s.to_lowercase());
+    match t.as_deref() {
+        Some("tui") => {
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE // TUI DASHBOARD HILFE", "💡".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Aufruf:           {}", "sb-ssh [tui]".bright_yellow().bold());
+            println!("  Beschreibung:     Vollbild-Terminal-Oberfläche (Ratatui) mit Live-Ping");
+            println!("\n  Tastenkürzel:");
+            println!("    {}        Verbindung zum ausgewählten Server herstellen", "[ENTER]".bright_cyan().bold());
+            println!("    {}        Neuen Server interaktiv zum Tresor hinzufügen", "[+] / [A]".bright_green().bold());
+            println!("    {}        Ausgewählten Server mit Bestätigung löschen", "[D] / [X]".bright_red().bold());
+            println!("    {}            Ping-Latenzen aller Server live neu messen", "[R]".bright_yellow().bold());
+            println!("    {}            OAuth2 / OIDC Browser-Login ausführen", "[L]".bright_magenta().bold());
+            println!("    {}    Navigation in der Server-Tabelle", "[↑/↓/j/k]".bright_cyan());
+            println!("    {}        Hilfe-Popup ein- / ausblenden", "[?] / [H]".bright_yellow().bold());
+            println!("    {}        TUI beenden / Dialog schließen", "[Q] / [ESC]".bright_white().bold());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+        }
+        Some("socks5") | Some("proxy") => {
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE // DYNAMISCHER SOCKS5-PROXY (RFC 1928)", "🌐".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Aufruf:           {}", "sb-ssh proxy <server> [--port 1080]".bright_yellow().bold());
+            println!("  OpenSSH-Alias:    {}", "ssh -D 1080 <server>".bright_yellow().bold());
+            println!("  Beschreibung:     Öffnet einen lokalen SOCKS5-Server, der allen TCP-Traffic");
+            println!("                    in-memory über SSH Direct-TCPIP an den Remote-Host leitet.");
+            println!("\n  Beispiele:");
+            println!("    # 1. Proxy auf Port 1080 starten:");
+            println!("    {}", "sb-ssh proxy srv-prod-01 --port 1080".bright_white());
+            println!("\n    # 2. HTTP/HTTPS-Traffic über Remote-Netzwerk tunneln (kein DNS-Leak):");
+            println!("    {}", "curl --socks5-hostname 127.0.0.1:1080 https://internal-api.lan".bright_white());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+        }
+        Some("audit") | Some("replay") | Some("record") => {
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE // BSI IT-GRUNDSCHUTZ AUDIT & RECORDING", "🛡️".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Compliance:       BSI OPS.1.1.4 (Protokollierung) & DER.1 (Erkennung)");
+            println!("  Audit-Speicher:   ~/.sb-ssh/audit/sessions.jsonl");
+            println!("  Cast-Speicher:    ~/.sb-ssh/recordings/<session_id>.cast");
+            println!("\n  Befehle:");
+            println!("    {}      Sitzung aufzeichnen (Asciinema v2)", "sb-ssh connect <server> -r".bright_yellow());
+            println!("    {}               Revisions-Tabelle formatieren", "sb-ssh audit".bright_yellow());
+            println!("    {}        JSONL-Export für Splunk / Elastic", "sb-ssh audit --json".bright_yellow());
+            println!("    {}     Aufgezeichnete Sitzung abspielen", "sb-ssh replay <session_id>".bright_yellow());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+        }
+        Some("cert") | Some("certs") | Some("oauth") | Some("ca") => {
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE // ZERO-KEY CA & EPHEMERAL CERTIFICATES", "🔑".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Prinzip:          Keine statischen Keys auf Servern oder Laptops.");
+            println!("                    Browser-Login generiert 8h gültige Ed25519-User-Zertifikate.");
+            println!("\n  Befehle:");
+            println!("    {}               Browser-Authentifizierung (OAuth2 PKCE)", "sb-ssh login".bright_yellow());
+            println!("    {}              Aktiven Token- und Zertifikatsstatus prüfen", "sb-ssh status".bright_yellow());
+            println!("    {}              Zertifikat manuell generieren (z.B. 12h)", "sb-ssh cert 12".bright_yellow());
+            println!("    {}              1-Zeilen sshd_config für neue Server ausgeben", "sb-ssh server-init".bright_yellow());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+        }
+        Some("tunnel") | Some("forward") => {
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE // TCP PORT-FORWARDING & TUNNELS", "⚡".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Aufruf:           {}", "sb-ssh tunnel <server> <local_port>:<remote_port>".bright_yellow().bold());
+            println!("\n  Beispiele:");
+            println!("    # Remote PostgreSQL (5432) auf localhost:5432 binden:");
+            println!("    {}", "sb-ssh tunnel srv-db 5432:5432".bright_white());
+            println!("\n    # Internen Remote-Webserver auf Port 8080 testen:");
+            println!("    {}", "sb-ssh tunnel srv-prod 8080:80".bright_white());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+        }
+        Some("sftp") | Some("push") | Some("pull") => {
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE // NATIVE SFTP FILE TRANSFERS", "📁".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Engine:           100% Pure-Rust russh-sftp (keine externe scp.exe)");
+            println!("\n  Befehle:");
+            println!("    {}    Datei hochladen (Push)", "sb-ssh push <server> <local> [remote]".bright_yellow());
+            println!("    {}    Datei herunterladen (Pull)", "sb-ssh pull <server> <remote> [local]".bright_yellow());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+        }
+        Some("jump") | Some("bastion") | Some("proxyjump") => {
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE // PURE-RUST PROXYJUMP (BASTION KASKADE)", "🌉".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Prinzip:          SSH-over-SSH Direct-TCPIP Stream im Speicher.");
+            println!("                    Keine offenen lokalen Ports, keine externen Prozesse.");
+            println!("\n  Einrichtung & Aufruf:");
+            println!("    # 1. Server mit Jump-Host hinterlegen:");
+            println!("    {}", "sb-ssh add db-internal 10.0.1.5 --jump bastion-dmz".bright_white());
+            println!("\n    # 2. Nahtlos verbinden:");
+            println!("    {}", "sb-ssh connect db-internal".bright_white());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+        }
+        Some("exec") | Some("broadcast") => {
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE // MULTI-SERVER BROADCAST EXECUTION", "⚡".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Aufruf:           {}", "sb-ssh exec \"<befehl>\" [--target all] [--tag <tag>]".bright_yellow().bold());
+            println!("\n  Beispiele:");
+            println!("    # Uptime parallel auf allen Hosts abfragen:");
+            println!("    {}", "sb-ssh exec \"uptime\" --target all".bright_white());
+            println!("\n    # Festplattenbelegung nur auf Servern mit Tag 'prod' abfragen:");
+            println!("    {}", "sb-ssh exec \"df -h /\" --tag prod".bright_white());
+            println!("{}", "══════════════════════════════════════════════════════════════════".bright_black());
+        }
+        _ => {
+            // General Cheatsheet
+            println!("{}", "══════════════════════════════════════════════════════════════════════════════════════════".bright_black());
+            println!("  {} S&B NETGATE (`sb-ssh`) // TACTICAL COMMAND & CHEATSHEET REFERENCE", "🛡️".bright_cyan());
+            println!("{}", "══════════════════════════════════════════════════════════════════════════════════════════".bright_black());
+            println!("  Version: 0.1.0  |  Lizenz: MIT (100% Free & Open-Source)  |  Pure-Rust Standalone");
+            println!("  Dokumentation & Code: https://github.com/Skulls-and-Bones/sb-ssh");
+
+            println!("\n  {}", "► 1. INTERAKTIVE BEDIENOBERFLÄCHEN".bright_cyan().bold());
+            println!("     {:<32} Startet das moderne Vollbild-TUI-Dashboard", "sb-ssh [tui]".bright_yellow().bold());
+            println!("     {:<32} Startet das zeilenbasierte Textmenü", "sb-ssh menu".bright_yellow().bold());
+
+            println!("\n  {}", "► 2. VERBINDUNG & AUTHENTIFIZIERUNG".bright_cyan().bold());
+            println!("     {:<32} Direktverbindung (z.B. 'sb-ssh srv-prod-01')", "sb-ssh <server>".bright_yellow().bold());
+            println!("     {:<32} Verbindet mit hinterlegtem Server oder ad-hoc", "sb-ssh connect <server>".bright_yellow().bold());
+            println!("     {:<32} OAuth2/OIDC Browser-Login (GitHub, Google, OIDC)", "sb-ssh login".bright_yellow().bold());
+            println!("     {:<32} Zeigt aktiven Identity-Token & Zertifikats-Restzeit", "sb-ssh status".bright_yellow().bold());
+            println!("     {:<32} Beendet aktive Sitzung und löscht lokalen Token", "sb-ssh logout".bright_yellow().bold());
+            println!("     {:<32} Erzeugt manuelles ephemeres Ed25519-Zertifikat", "sb-ssh cert [hours]".bright_yellow().bold());
+
+            println!("\n  {}", "► 3. NETZWERK, TUNNEL & PROXY".bright_cyan().bold());
+            println!("     {:<32} Dynamischer SOCKS5-Proxy (RFC 1928, Standard: 1080)", "sb-ssh proxy <srv> [--port P]".bright_yellow().bold());
+            println!("     {:<32} OpenSSH-kompatibler dynamischer SOCKS5-Proxy", "ssh -D 1080 <server>".bright_yellow().bold());
+            println!("     {:<32} TCP Port-Forwarding (z.B. 'sb-ssh tunnel db 5432:5432')", "sb-ssh tunnel <srv> L:R".bright_yellow().bold());
+            println!("     {:<32} Server mit vorgeschaltetem Bastion-Host anlegen", "sb-ssh add <s> <ip> --jump <b]".bright_yellow().bold());
+
+            println!("\n  {}", "► 4. BSI IT-GRUNDSCHUTZ AUDIT & RECORDING".bright_cyan().bold());
+            println!("     {:<32} Verbindung aufbauen & Sitzung aufzeichnen (.cast)", "sb-ssh connect <srv> -r".bright_yellow().bold());
+            println!("     {:<32} Revisionssicheres Sitzungsprotokoll anzeigen", "sb-ssh audit [--limit N]".bright_yellow().bold());
+            println!("     {:<32} Audit-Log als JSONL für SIEM (Splunk / Elastic)", "sb-ssh audit --json".bright_yellow().bold());
+            println!("     {:<32} Aufgezeichnete Session nativ im Terminal abspielen", "sb-ssh replay <session_id>".bright_yellow().bold());
+
+            println!("\n  {}", "► 5. DATEITRANSFER & BROADCAST-AUTOMATION".bright_cyan().bold());
+            println!("     {:<32} Datei per nativem SFTP hochladen (Push)", "sb-ssh push <srv> <local> [dst]".bright_yellow().bold());
+            println!("     {:<32} Datei per nativem SFTP herunterladen (Pull)", "sb-ssh pull <srv> <remote> [dst]".bright_yellow().bold());
+            println!("     {:<32} Parallele Befehlsausführung über Server/Tags", "sb-ssh exec \"<cmd>\" [--tag T]".bright_yellow().bold());
+            println!("     {:<32} Non-interactive Remote-Kommando (CI / Skripte)", "sb-ssh <srv> \"<command>\"".bright_yellow().bold());
+
+            println!("\n  {}", "► 6. SERVER-VERWALTUNG & SYSTEM".bright_cyan().bold());
+            println!("     {:<32} Listet alle Server mit Live-Latenz auf", "sb-ssh list [--tag <tag>]".bright_yellow().bold());
+            println!("     {:<32} Neuen Server zum lokalen Tresor hinzufügen", "sb-ssh add <name> <host>".bright_yellow().bold());
+            println!("     {:<32} Server aus dem Tresor löschen", "sb-ssh remove <name>".bright_yellow().bold());
+            println!("     {:<32} Non-interactive CPU/RAM/Disk Health-Probe", "sb-ssh info <server>".bright_yellow().bold());
+            println!("     {:<32} 1-Zeilen-Setup für Zielserver (sshd_config)", "sb-ssh server-init".bright_yellow().bold());
+            println!("     {:<32} Shell-Autovervollständigung (powershell, zsh, ...)", "sb-ssh completions <shell>".bright_yellow().bold());
+            println!("     {:<32} Detaillierte Hilfe zu einem Thema anzeigen", "sb-ssh help [thema]".bright_yellow().bold());
+
+            println!("\n  {}", "► 7. VERFÜGBARE HILFE-THEMEN (sb-ssh help <thema>):".bright_black());
+            println!("     tui, proxy, socks5, audit, replay, certs, tunnel, sftp, jump, exec");
+
+            println!("{}", "══════════════════════════════════════════════════════════════════════════════════════════".bright_black());
+        }
+    }
 }
