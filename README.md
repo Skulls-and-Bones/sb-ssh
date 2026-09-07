@@ -74,6 +74,94 @@ sb-ssh completions zsh > ~/.zfunc/_sb-ssh
 
 ---
 
+## 🔄 Migrations-Tutorial: In 5 Minuten von OpenSSH zu S&B NetGate
+
+Die Migration von herkömmlichem OpenSSH zu S&B NetGate erfolgt **ohne Ausfallzeit**, **100% abwärtskompatibel** und in 5 einfachen Schritten:
+
+### Schritt 1: Automatische Übernahme bestehender Hosts (`~/.ssh/config`)
+Du musst deine Server nicht neu anlegen. Beim ersten Start liest `sb-ssh` automatisch deine bestehende `~/.ssh/config` ein:
+* Hostnamen, IP-Adressen, Ports und SSH-Benutzer werden nahtlos in den lokalen Tresor übernommen.
+* Bestehende Bastion-Kaskadierungen (`ProxyJump`) werden automatisch erkannt und nativ gemappt.
+* Deine bestehenden Private Keys (`id_ed25519`, `id_rsa`) funktionieren übergangsweise sofort weiter.
+
+```bash
+# Zeigt alle automatisch importierten Hosts mit Live-Ping:
+sb-ssh list
+```
+
+### Schritt 2: Drop-in Ersatz für bestehende Tools (`git`, `rsync`, VS Code)
+Da `sb-ssh` alle standardmäßigen OpenSSH-Flags (`-p`, `-i`, `-o`, `-T`, `-v`, `-q`) unterstützt, kannst du OpenSSH systemweit transparent ersetzen:
+
+```powershell
+# Windows: Als primäre ssh.exe im User-Pfad registrieren:
+Copy-Item "$env:USERPROFILE\.cargo\bin\sb-ssh.exe" "$env:USERPROFILE\.cargo\bin\ssh.exe" -Force
+
+# Linux / macOS: Symlink anlegen:
+sudo ln -sf ~/.cargo/bin/sb-ssh /usr/local/bin/ssh
+```
+
+**Git-Transfers tunneln:**
+```powershell
+$env:GIT_SSH_COMMAND = "sb-ssh"
+git pull origin main
+```
+Ab diesem Zeitpunkt laufen alle deine gewohnten Workflows (inklusive VS Code Remote-SSH) transparent über die Pure-Rust Engine von NetGate.
+
+### Schritt 3: Server auf Zero-Key umstellen (Die CA autorisieren)
+Das größte Sicherheitsrisiko herkömmlicher Setups sind statische Keys auf Zielservern. Um einen Server schlüsselfrei zu machen:
+
+1. Führe den Einrichtungshelfer auf deinem lokalen Rechner aus:
+   ```bash
+   sb-ssh server-init
+   ```
+2. Führe die ausgegebenen 2 Befehle einmalig als Root auf deinem Zielserver aus:
+   ```bash
+   # CA Public Key hinterlegen:
+   echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... S&B_NetGate_CA' | sudo tee /etc/ssh/sb_ca.pub
+
+   # In /etc/ssh/sshd_config einbinden und sshd neuladen:
+   echo 'TrustedUserCAKeys /etc/ssh/sb_ca.pub' | sudo tee -a /etc/ssh/sshd_config
+   sudo sshd -t && sudo systemctl reload ssh
+   ```
+**Ergebnis:** Der Server vertraut ab sofort allen von deiner CA signierten 8h-Zertifikaten. Du musst nie wieder SSH-Keys auf diesen Server kopieren oder bei Personalwechseln mühsam manuell bereinigen.
+
+### Schritt 4: Zentrale Identität verknüpfen (OAuth2 / OIDC)
+Melde dich über deinen Identity-Provider (GitHub, Google, Keycloak, etc.) an:
+```bash
+sb-ssh login
+```
+Der Browser öffnet sich, verifiziert deine Identität und stellt in Millisekunden ein ephemeres OpenSSH-Zertifikat mit 8 Stunden Gültigkeit aus.
+Mit `sb-ssh status` kannst du jederzeit die Restlaufzeit deines Zertifikats einsehen.
+
+### Schritt 5: BSI Session-Audit & Recording nutzen
+Aktiviere für sensible Infrastruktur-Arbeiten die automatische Aufzeichnung:
+```bash
+# Sitzung verbinden und als Asciinema v2 (.cast) revisionssicher mitloggen:
+sb-ssh connect prod-server --record
+
+# Nach der Sitzung das BSI IT-Grundschutz Protokoll prüfen:
+sb-ssh audit
+
+# Die Sitzung für Incident-Reviews oder Team-Demos offline abspielen:
+sb-ssh replay <session_id>
+```
+
+---
+
+### 📊 Vergleich: OpenSSH vs. S&B NetGate
+
+| Kriterium | Herkömmliches OpenSSH | S&B NetGate (`sb-ssh`) |
+| :--- | :--- | :--- |
+| **Schlüssel-Management** | Statische `id_ed25519` Keys in `authorized_keys` | 100% Zero-Key: 8h ephemere Zertifikate via OAuth2 |
+| **Offboarding von Mitarbeitern**| Manuelles Key-Löschen auf jedem einzelnen Server | Sofortiger Entzug über IdP (Zertifikat verfällt in <8h) |
+| **Bedienkomfort** | Reine Text-CLI | Minimalistisches Vollbild-TUI mit Live-Ping & Suche |
+| **Session-Audit** | Nur unvollständige Syslog-Einträge | Revisionssichere JSONL-Trails & Asciinema Replay |
+| **SOCKS5 & Bastions** | Externe Subprozesse & komplexe Parameter | 1-Klick SOCKS5 (`-D 1080`) & In-Memory ProxyJump |
+| **Dateitransfer** | Auf externe `scp.exe` / OpenSSL angewiesen | Autarkes Pure-Rust SFTP (`push` & `pull`) |
+| **Abhängigkeiten** | C-Bibliotheken / externe Binaries | 100% autarke Rust Standalone-Binary |
+
+---
+
 ## 📖 Anwendungsbeispiele & CLI Cheatsheet
 
 ### 🖥️ Interaktive Terminal-Oberfläche (TUI)
