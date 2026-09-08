@@ -1,0 +1,38 @@
+[forge]
+name = "sb-ssh"
+version = "0.1.0"
+
+# ── RECIPES (atomare Aufgaben) ────────────────────────────────────────────────
+[recipe.check]
+description = "Cargo Type & Syntax-Check"
+run = ["cargo check"]
+
+[recipe.test]
+description = "S&B NetGate Test-Suite ausführen"
+run = ["cargo test"]
+
+[recipe.build]
+description = "Release-Binary kompilieren"
+depends_on = ["check"]
+run = ["cargo build --release"]
+
+[recipe.install]
+description = "Release-Binary lokal installieren (~/.cargo/bin)"
+depends_on = ["build"]
+run = ["cargo install --path . --force"]
+
+# ── PIPELINES (geordnete Stages) ──────────────────────────────────────────────
+[pipeline.ci]
+description = "NetGate CI Pipeline"
+stages = [
+  { name = "Quality Gate", recipes = ["check", "test"], parallel = true },
+  { name = "Compile",      recipes = ["build"] }
+]
+
+[pipeline.install]
+description = "Vollständige Prüfung, Build und lokale Installation"
+stages = [
+  { name = "Gate",    recipes = ["check", "test"], parallel = true },
+  { name = "Install", recipes = ["install"] }
+]
+
