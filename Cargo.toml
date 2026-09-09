@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 description = "S&B NetGate (sb-ssh) — Modern OAuth-secured SSH CLI with ephemeral certificates & TUI"
 authors = ["Skulls & Bones Lab <dev@skulls-and-bones.org>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/skulls-and-bones/sb-ssh"
+homepage = "https://skulls-and-bones.org"
+keywords = ["ssh", "security", "zero-trust", "tui", "netgate"]
+categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
